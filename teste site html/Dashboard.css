@@ -1,0 +1,113 @@
+/* Estilos Gerais */
+body {
+    background: #0A0F1C; /* Dark background for a modern look */
+    font-family: 'Montserrat', sans-serif;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    margin: 0;
+}
+
+.header {
+    padding: 1px;
+    margin: 10px 20px 20px 20px;
+    background: #1E1E2F; /* Darker blue-gray for header */
+    border-bottom: 2px solid #FFD700; /* Bright blue accent */
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.title {
+    font-size: 1.8rem;
+    font-weight: 600;
+    color: #007BFF; /* Bright blue for title */
+    text-align: center;
+    letter-spacing: 0.5px;
+    margin: 15px 0;
+}
+
+.button {
+    background: #0b003d; /* Modern blue for button */
+    margin: 20px auto;
+    border: 1px solid #007BFF; /* Bright blue border */
+    padding: 12px 24px;
+    cursor: pointer;
+    color: #FFFFFF; /* White text for contrast */
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    font-weight: 500;
+    font-family: 'Montserrat', sans-serif;
+    display: flex;
+    align-items: flex-end; 
+}
+.button:hover {
+    background: #0b003d; /* Darker blue on hover */
+    transform: translateY(-2px);
+}
+
+
+.content {
+    padding: 0 20px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    text-align: center;
+}
+
+.row {
+    display: flex;
+    gap: 20px;
+    width: 100%;
+    justify-content: center;
+}
+
+.box {
+    flex: 1 1 calc(33.333% - 50%);
+    height: 450px;
+    background: #1E1E2F; /* Dark blue-gray for boxes */
+    border-radius: 12px;
+    transition: transform 0.2s ease;
+    border: 1px solid rgba(0, 0, 0, 0.3); /* Light blue border */
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5); /* Subtle shadow for depth */
+}
+
+.box:hover {
+    transform: translateY(-2px);
+    border-color: #FFD700; /* Darker blue on hover */
+}
+
+.box-1, .box-2, .box-3, .box-4, .box-5, .box-6 {
+    background: #1E1E2F; /* Dark blue-gray for boxes */
+}
+
+.box-7 {
+    flex: 1 1 100%;
+    height: 300px;
+    background: #1E1E2F; /* Dark blue-gray for larger box */
+    border-radius: 12px;
+}
+
+.button-box {
+    display: flex;
+    justify-content: center;
+    align-items: flex-end; /* Alinha o botão na parte inferior */
+    padding-bottom: 20px; /* Espacemento para o botão */
+}
+
+:root {
+    --chart-blue: #007BFF; /* Bright modern blue */
+    --chart-gold: #FFD700; /* Gold */
+    --chart-dark: #1E1E2F; /* Dark blue-gray */
+    --chart-white: #FFFFFF; /* White */
+}
+
+h1 {
+    color: rgb(165, 137, 0);
+    background: linear-gradient(to top, #FFD700, #000000); /* Gradiente dourado para azul */
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-size: 15px;
+}

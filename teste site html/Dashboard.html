@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Página Simples</title>
+    <link rel="stylesheet" href="Dashboard.css">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+
+</head>
+<body class="bg-light">
+    <header class="header">
+        <h1 class="title">Cabeçalho</h1>
+        <button id="btn-import" class="button">Botão</button>
+    </header>
+    <main class="content">
+        <div class="row">
+            <div class="box box-square">
+                <h1>Grafico 1</h1>
+                <button id="btn-export-grafico1" class="button">Exportar</button>
+                <canvas id="grafico1Canvas"></canvas>
+            </div>
+                
+            <div class="box box-square">
+                <h1>Grafico 2</h1>
+                <button id="btn-export-grafico2" class="button">Exportar</button>
+                <canvas id="grafico2Canvas"></canvas>
+            </div>
+        </div>
+        <div class="row">
+            <div class="box box-square">
+                <h1>Grafico 3</h1>
+                <button id="btn-export-grafico3" class="button">Exportar</button>
+                <canvas id="grafico3Canvas"></canvas>
+            </div>
+            <div class="box box-square">
+                <h1>Grafico 4</h1>
+                <button id="btn-export-grafico4" class="button">Exportar</button>
+                <canvas id="grafico4Canvas"></canvas>
+            </div>
+        </div>
+        <div class="row">
+            <div class="box box-rectangle">
+                <h1>Grafico 5</h1>
+                <button id="btn-export-grafico5 class="button">Exportar</button>
+                <canvas id="grafico5Canvas"></canvas>
+            </div>
+        </div>
+        <div class="row">
+            <div class="box box-rectangle">
+                <h1>Grafico 6</h1>
+                <button id="btn-export-grafico6" class="button">Exportar</button>
+                <canvas id="grafico6Canvas"></canvas>
+            </div>
+        </div>
+    </main>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const fileinput = document.createElement('input');
+            fileinput.type = 'file';
+            fileinput.accept = '.csv, .xlsx';
+            fileinput.style.display = 'none';
+            fileinput.addEventListener('change', handleFileSelect, false);
+            document.body.appendChild(fileinput);
+
+            document.getElementById('btn-import').addEventListener('click', () => {
+                console.log('Botão Importar clicado');
+                fileinput.click();
+            });
+
+            function handleFileSelect(event) {
+                const file = event.target.files[0];
+                if (!file) {
+                    alert('Por favor, selecione um arquivo.');
+                    return;
+                }
+
+                const reader = new FileReader();
+
+                reader.onload = function(e) {
+                    const data = e.target.result;
+                    if (file.name.endsWith('.csv')) {
+                        const csvData = Papa.parse(data, { header: true }).data;
+                        console.log('Dados CSV:', csvData);
+                        renderCharts(csvData);
+                    } else if (file.name.endsWith('.xlsx')) {
+                        const xlxsData = XLSX.read(data, { type: 'binary' });
+                        const sheetName = xlxsData.SheetNames[0];
+                        const worksheet = xlxsData.Sheets[sheetName];
+                        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                        console.log('Dados XLSX:', jsonData);
+                        renderCharts(jsonData);
+                    }
+                };
+
+                reader.readAsBinaryString(file);
+            }
+
+            function renderCharts(data) {
+                
+                console.log('Renderizando Gráficos:', data);
+
+                const ctx1 = document.getElementById('grafico1Canvas').getContext('2d');
+                const ctx2 = document.getElementById('grafico2Canvas').getContext('2d');
+                const ctx3 = document.getElementById('grafico3Canvas').getContext('2d');
+                const ctx4 = document.getElementById('grafico4Canvas').getContext('2d');
+                const ctx5 = document.getElementById('grafico5Canvas').getContext('2d');
+                const ctx6 = document.getElementById('grafico6Canvas').getContext('2d');
+
+                new Chart(ctx1, { 
+                    type: 'bar', // ou 'line', 'pie', etc.
+                    data: {
+                        labels: data.map(row => row[0]), // Ajuste conforme necessário
+                        datasets: [{
+                            label: 'Exemplo',
+                            data: data.map(row => row[1]), // Ajuste conforme necessário
+                            backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                            borderColor: 'rgba(75, 192, 192, 1)',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                 });
+                new Chart(ctx2, { /* Configurações do gráfico 2 */ });
+                new Chart(ctx3, { /* Configurações do gráfico 3 */ });
+                new Chart(ctx4, { /* Configurações do gráfico 4 */ });
+                new Chart(ctx5, { /* Configurações do gráfico 5 */ });
+                new Chart(ctx6, { /* Configurações do gráfico 6 */ });
+            }
+            function exportChart(ChartId) {
+                const canvas = docment.getElement(ChartId)
+                const link = document.createElement('a');
+                link.href = canvas.toDataURL('image/png');
+                link.download = '${ChartId}.png';
+                link.click();
+            }
+
+            document.getElementById('btn-export-grafico1').addEventListener('click', () => exportChart('grafico1Canvas'));
+            document.getElementById('btn-export-grafico2').addEventListener('click', () => exportChart('grafico2Canvas'));
+            document.getElementById('btn-export-grafico3').addEventListener('click', () => exportChart('grafico3Canvas'));
+            document.getElementById('btn-export-grafico4').addEventListener('click', () => exportChart('grafico4Canvas'));
+            document.getElementById('btn-export-grafico5').addEventListener('click', () => exportChart('grafico5Canvas'));
+            document.getElementById('btn-export-grafico6').addEventListener('click', () => exportChart('grafico6Canvas'));
+        });
+    </script>
+</body>
+</html>

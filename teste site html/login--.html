@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login</title>
+    <link rel="stylesheet" href="login--.css">
+    <link rel='stylesheet' href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css'>
+</head>
+<body>
+    <main class="container">
+        <form id="login-form">
+            <h1>Login</h1>
+            <div class="input-box">
+                <input type="text" id="usuario" placeholder="Digite o usuário">
+                <i class="bx bx-user"></i>
+            </div>
+            <div class="input-box">
+                <input type="password" id="password" placeholder="Digite a senha">
+                <i class="bx bx-lock-alt"></i>
+            </div>
+            <div class="remember">
+                <label>
+                    <input type="checkbox" id="remember">
+                    Lembrar de mim
+                </label>
+            </div>
+            <button type="submit">Entrar</button>
+            <p id="error-message" class="error-message" style="color: red; display: none;">Usuário ou senha incorretos</p>
+        </form>
+    </main>
+    <script>
+        document.getElementById('login-form').addEventListener('submit', function(event) {
+            event.preventDefault(); 
+
+            const username = document.getElementById('usuario').value; 
+            const password = document.getElementById('password').value; 
+
+            if (username === 'admin' && password === '1234') {
+                window.location.href = 'Dashboard.html'; 
+            } else {
+                const errorMessage = document.getElementById('error-message');
+                errorMessage.style.display = 'block';
+                errorMessage.textContent = 'Usuário ou senha incorretos';
+            }
+        });
+    </script>
+</body>
+</html>
