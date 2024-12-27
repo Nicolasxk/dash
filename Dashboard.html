@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="pt">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Página Simples</title>
+    <link rel="stylesheet" href="Dashboard.css">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <script src="https://cdn.anychart.com/releases/8.13.0/js/anychart-data-adapter.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/date-fns/2.29.3/date_fns.min.js"></script>
+
+</head>
+
+<body class="bg-light">
+    <header class="header">
+        <h1 class="title">Cabeçalho</h1>
+        <button id="btn-import" class="button">Importar</button>
+    </header>
+    <main class="content">
+        <div class="row">
+            <div class="box box-square">
+                <h1>Previsão total de entrantes</h1>
+                <div class="chart-container"><canvas id="grafico1Canvas"></canvas></div>
+            </div>
+            <div class="box box-square">
+                <h1>entrantes</h1>
+                <div class="chart-container"><canvas id="grafico2Canvas"></canvas></div>
+
+            </div>
+            <div class="box box-square">
+                <h1>Total Ano vs Ano</h1>
+                <div class="chart-container"><canvas id="grafico3Canvas"></canvas></div>
+            </div>
+        </div>
+        <div class="row">
+            <div class="box box-square">
+                <h1>comparativo Ano vs Ano</h1>
+                <div class="chart-container"><canvas id="grafico4Canvas"></canvas></div>
+            </div>
+            <div class="box box-square">
+                <h1>previsão por Categoria</h1>
+                <div class="chart-container"><canvas id="grafico5Canvas"></canvas></div>
+
+            </div>
+            <div class="box box-square">
+                <h1>total de previsão para o proximo mês</h1>
+                <div class="chart-container"><canvas id="grafico6Canvas"></canvas></div>
+            </div>
+        </div>
+        <div class="row">
+            <div class="box box-rectangle">
+                <h1>Previsão por Categoria</h1>
+                <div class="chart-container"><canvas id="grafico7Canvas"></canvas></div>
+            </div>
+        </div>
+        <div class="row">
+            <div class="box box-rectangle">
+                <h1>total de previsão para o proximo mês</h1>
+                <div class="chart-container"><canvas id="grafico8Canvas"></canvas></div>
+                <div class="button-box"><button id="btn-export-grafico8" class="button">Exportar</button></div>
+            </div>
+        </div>
+        <div class="row">
+            <div class="box box-rectangle">
+                <h1>proximos eventos</h1>
+               <div class="chart-container"> <canvas id="grafico9Canvas"></canvas></div>
+            </div>
+        </div>
+        <div class="row">
+            <div class="box box-rectangle">
+                <h1>dados diarizados de entrantes total</h1>
+               <div class="chart-container"> <canvas id="grafico10Canvas"></canvas></div>
+
+            </div>
+        </div>
+        <div class="row">
+            <div class="box box-rectangle">
+                <h1>dados diarizados por Categoria</h1>
+                <div class="chart-container"><canvas id="grafico11Canvas"></canvas></div>
+    
+            </div>
+        </div>
+    </main>
+    <script>
+
+     let grafico1, grafico2, grafico3, grafico4, grafico5, grafico6, grafico7, grafico8, grafico9, grafico10, grafico11;
+    let processedData; // Variável global para armazenar os dados processados
+
+document.addEventListener('DOMContentLoaded', function () {
+  const fileinput = document.createElement('input');
+  fileinput.type = 'file';
+  fileinput.accept = '.csv, .xlsx';
+  fileinput.style.display = 'none';
+  fileinput.addEventListener('change', handleFileSelect, false);
+  document.body.appendChild(fileinput);
+
+  document.getElementById('btn-import').addEventListener('click', () => {
+    console.log('Botão Importar clicado');
+    fileinput.click();
+  });
+
+  // Função para extrair o ano de uma string de data no formato AAAA-MM-DD HH:MM:SS
+  function extrairAno(dataString) {
+    return parseInt(dataString.substring(0, 4));
+  }
+
+  // Função para filtrar dados por um ano específico
+  function filtrarDadosPorAno(data, anoDesejado) {
+    const indiceData = data[0].indexOf('ds'); 
+    return data.slice(1).filter(row => {
+      const dataString = row[indiceData];
+      const ano = extrairAno(dataString);
+      return ano === anoDesejado;
+    });
+  }
+
+  // Função para agrupar dados por ano
+  function agruparDadosPorAno(data) {
+    const indiceData = data[0].indexOf('ds');
+    const dadosAgrupados = {};
+
+    data.slice(1).forEach(row => {
+      const dataString = row[indiceData];
+      const ano = extrairAno(dataString);
+
+      if (!dadosAgrupados[ano]) {
+        dadosAgrupados[ano] = [];
+      }
+      dadosAgrupados[ano].push(row);
+    });
+
+    return dadosAgrupados;
+  }
+
+  // Função para criar datasets comparativos para o gráfico
+  function criarDatasetsComparativos(dadosPorAno, anos, coluna, indiceColuna) {
+    const datasets = [];
+
+    for (const ano of anos) {
+      if (dadosPorAno[ano]) {
+        datasets.push({
+          label: `${coluna} - ${ano}`,
+          data: dadosPorAno[ano].map(row => {
+            const valor = parseFloat(row[indiceColuna]);
+            return isNaN(valor) ? 0 : valor;
+          }),
+          // ... configurações de estilo (cores, etc.)
+        });
+      }
+    }
+
+    return datasets;
+  }
+
+  // Função para preencher os dropdowns de ano
+  function preencherDropdownsAnos(data) {
+    const indiceData = data[0].indexOf('ds');
+    const anos = new Set();
+
+    data.slice(1).forEach(row => {
+      const dataString = row[indiceData];
+      const ano = extrairAno(dataString);
+      anos.add(ano);
+    });
+
+    // Dropdowns para o gráfico 3
+    const ano1SelectGrafico3 = document.getElementById('ano1Select-grafico3');
+    const ano2SelectGrafico3 = document.getElementById('ano2Select-grafico3');
+
+    // Dropdowns para o gráfico 4
+    const ano1SelectGrafico4 = document.getElementById('ano1Select-grafico4');
+    const ano2SelectGrafico4 = document.getElementById('ano2Select-grafico4');
+
+    anos.forEach(ano => {
+      const option1Grafico3 = document.createElement('option');
+      option1Grafico3.value = ano;
+      option1Grafico3.text = ano;
+      ano1SelectGrafico3.add(option1Grafico3);
+
+      const option2Grafico3 = document.createElement('option');
+      option2Grafico3.value = ano;
+      option2Grafico3.text = ano;
+      ano2SelectGrafico3.add(option2Grafico3);
+
+      const option1Grafico4 = document.createElement('option');
+      option1Grafico4.value = ano;
+      option1Grafico4.text = ano;
+      ano1SelectGrafico4.add(option1Grafico4);
+
+      const option2Grafico4 = document.createElement('option');
+      option2Grafico4.value = ano;
+      option2Grafico4.text = ano;
+      ano2SelectGrafico4.add(option2Grafico4);
+    });
+  }
+
+  // Função para gerar o gráfico de barras (comparação de totais) - Gráfico 3
+  function gerarGraficoBarrasAnoVsAno(data) {
+    const ano1 = parseInt(document.getElementById('ano1Select-grafico3').value);
+    const ano2 = parseInt(document.getElementById('ano2Select-grafico3').value);
+    const coluna = document.getElementById('colunaSelect-grafico3').value;
+    const indiceColuna = data[0].indexOf(coluna);
+
+    const dadosAgrupados = agruparDadosPorAno(data);
+    const datasets = criarDatasetsComparativos(dadosAgrupados, [ano1, ano2], coluna, indiceColuna);
+
+    if (grafico3) grafico3.destroy();
+
+    const ctx3 = document.getElementById('grafico3Canvas').getContext('2d');
+    grafico3 = new Chart(ctx3, {
+      type: 'bar',
+      data: {
+        labels: [coluna], // Rótulo simplificado para o gráfico de barras
+        datasets: datasets
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          y: {
+            beginAtZero: true
+          }
+        }
+      }
+    });
+  }
+
+  // Função para gerar o gráfico de linhas (comparação diária) - Gráfico 4
+  function gerarGraficoLinhasAnoVsAno(data) {
+    const ano1 = parseInt(document.getElementById('ano1Select-grafico4').value);
+    const ano2 = parseInt(document.getElementById('ano2Select-grafico4').value);
+    const coluna = document.getElementById('colunaSelect-grafico4').value;
+    const indiceColuna = data[0].indexOf(coluna);
+    const indiceData = data[0].indexOf('data');
+
+    const dadosAno1 = filtrarDadosPorAno(data, ano1);
+    const dadosAno2 = filtrarDadosPorAno(data, ano2);
+
+    const labels = dadosAno1.map(row => row[indiceData]).slice(0, 30); // Limitar a 30 dias
+
+    const datasets = [
+      {
+        label: `${coluna} - ${ano1}`,
+        data: dadosAno1.map(row => parseFloat(row[indiceColuna])).slice(0, 30),
+        // ... configurações de estilo
+      },
+      {
+        label: `${coluna} - ${ano2}`,
+        data: dadosAno2.map(row => parseFloat(row[indiceColuna])).slice(0, 30),
+        // ... configurações de estilo
+      }
+    ];
+
+    if (grafico4) grafico4.destroy();
+
+    const ctx4 = document.getElementById('grafico4Canvas').getContext('2d');
+    grafico4 = new Chart(ctx4, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: datasets
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        // ... outras opções
+      }
+    });
+  }
+
+  // Adicionando os event listeners para os botões dos gráficos 3 e 4
+  document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('btn-gerar-grafico3').addEventListener('click', () => {
+      gerarGraficoBarrasAnoVsAno(processedData);
+    });
+
+    document.getElementById('btn-gerar-grafico4').addEventListener('click', () => {
+      gerarGraficoLinhasAnoVsAno(processedData);
+    });
+  });
+
+  function handleFileSelect(event) {
+    const file = event.target.files[0];
+    if (!file) {
+      alert('Por favor, selecione um arquivo.');
+      return;
+    }
+
+    const reader = new FileReader();
+
+    reader.onload = function (e) {
+      const data = e.target.result;
+
+      if (file.name.endsWith('.csv')) {
+        processedData = processCsvData(data);
+      } else if (file.name.endsWith('.xlsx')) {
+        processedData = processXlsxData(data);
+      }
+
+      if (processedData) {
+        // Destruir os gráficos existentes antes de criar novos
+        destroyExistingCharts();
+
+        // Preencher os dropdowns de ano
+        preencherDropdownsAnos(processedData);
+
+        // Definir valores padrão para os seletores (opcional)
+        const currentYear = new Date().getFullYear();
+        document.getElementById('ano1Select-grafico3').value = currentYear - 1; // Ano anterior como padrão
+        document.getElementById('ano2Select-grafico3').value = currentYear; // Ano atual como padrão
+        document.getElementById('colunaSelect-grafico3').value = 'y_previsto'; // Coluna padrão (ajuste se necessário)
+
+        document.getElementById('ano1Select-grafico4').value = currentYear - 1; // Ano anterior como padrão
+        document.getElementById('ano2Select-grafico4').value = currentYear; // Ano atual como padrão
+        document.getElementById('colunaSelect-grafico4').value = 'y_previsto'; // Coluna padrão (ajuste se necessário)
+
+        // Gerar os gráficos automaticamente
+        gerarGraficoBarrasAnoVsAno(processedData);
+        gerarGraficoLinhasAnoVsAno(processedData);
+
+        // Renderizar os demais gráficos
+        renderChart1(processedData);
+        renderChart2(processedData);
+        // ...
+      } else {
+        alert('Não foi possível processar o arquivo.');
+      }
+    };
+
+    reader.readAsBinaryString(file);
+  }
+
+  // Modificar a função processXlsxData para incluir o cabeçalho
+  function processXlsxData(data) {
+    const workbook = XLSX.read(data, { type: 'binary' });
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+
+    // Converta a planilha para JSON, incluindo a primeira linha como cabeçalho
+    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+    return jsonData;
+  }
+
+  // Modificar handleFileSelect para chamar preencherDropdownsAnos e renderChartAnoContraAno
+  function handleFileSelect(event) {
+    const file = event.target.files[0];
+    if (!file) {
+      alert('Por favor, selecione um arquivo.');
+      return;
+    }
+
+    const reader = new FileReader();
+
+    reader.onload = function (e) {
+      const data = e.target.result;
+      let processedData;
+
+      if (file.name.endsWith('.csv')) {
+        processedData = processCsvData(data);
+      } else if (file.name.endsWith('.xlsx')) {
+        processedData = processXlsxData(data);
+      }
+
+      if (processedData) {
+        // Destruir os gráficos existentes antes de criar novos
+        destroyExistingCharts();
+        renderChart1(processedData);
+        renderChart2(processedData);
+        preencherDropdownsAnos(processedData);
+        renderChartAnoContraAno(processedData);
+        // Adicione chamadas para renderizar outros gráficos conforme necessário
+      } else {
+        alert('Não foi possível processar o arquivo.');
+      }
+    };
+
+    reader.readAsBinaryString(file);
+  }
+
+  function processCsvData(data) {
+    const parsedData = Papa.parse(data, { header: true }).data;
+    return parsedData;
+  }
+
+  function processXlsxData(data) {
+    const xlxsData = XLSX.read(data, { type: 'binary' });
+    const sheetName = xlxsData.SheetNames[0];
+    const worksheet = xlxsData.Sheets[sheetName];
+    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+    return jsonData;
+  }
+
+  function destroyExistingCharts() {
+    if (grafico1) grafico1.destroy();
+    if (grafico2) grafico2.destroy();
+    if (grafico3) grafico3.destroy();
+    if (grafico4) grafico4.destroy();
+    if (grafico5) grafico5.destroy();
+    if (grafico6) grafico6.destroy();
+    if (grafico7) grafico7.destroy();
+    if (grafico8) grafico8.destroy();
+    if (grafico9) grafico9.destroy();
+    if (grafico10) grafico10.destroy();
+    if (grafico11) grafico11.destroy();
+  }
+
+  function renderChart1(data) {
+    if (!data || data.length === 0 || data[0].length < 4) {
+      console.error('Dados inválidos para o Gráfico 2.');
+      return;
+    }
+
+    const labels = data.slice(1).map(row => row[2]);
+    const chartData = data.slice(1).map(row => row[3]);
+
+    const ctx1 = document.getElementById('grafico1Canvas').getContext('2d');
+
+    const config = {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Dados da Segunda Coluna',
+          data: chartData,
+          backgroundColor: 'rgba(255, 99, 132, 0.2)',
+          borderColor: 'rgba(255, 99, 132, 1)',
+          borderWidth: 1
+        }]
+      },
+      options: {
+        responsive: true, // Torna o gráfico responsivo
+        maintainAspectRatio: false, // Permite que o gráfico altere sua proporção
+        scales: {
+          y: {
+            beginAtZero: true
+          }
+        }
+      }
+    };
+
+    grafico1 = new Chart(ctx1, config);
+  }
+
+  function renderChart2(data) {
+    if (!data || data.length === 0 || data[0].length < 4) {
+      console.error('Dados inválidos para o Gráfico 2.');
+      return;
+    }
+
+    const labels = data.slice(1).map(row => row[2]);
+    const chartData = data.slice(1).map(row => row[3]);
+
+    const ctx2 = document.getElementById('grafico2Canvas').getContext('2d');
+
+    const config = {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Dados da Segunda Coluna',
+          data: chartData,
+          backgroundColor: 'rgba(255, 99, 132, 0.2)',
+          borderColor: 'rgba(255, 99, 132, 1)',
+          borderWidth: 1
+        }]
+      },
+      options: {
+        responsive: true, // Torna o gráfico responsivo
+        maintainAspectRatio: false, // Permite que o gráfico altere sua proporção
+        scales: {
+          y: {
+            beginAtZero: true
+          }
+        }
+      }
+    };
+
+    grafico2 = new Chart(ctx2, config);
+  }
+
+  document.getElementById('btn-export-grafico1').addEventListener('click', () => exportChart('grafico1Canvas'));
+  document.getElementById('btn-export-grafico2').addEventListener('click', () => exportChart('grafico2Canvas'));
+  document.getElementById('btn-export-grafico3').addEventListener('click', () => exportChart('grafico3Canvas'));
+  document.getElementById('btn-export-grafico4').addEventListener('click', () => exportChart('grafico4Canvas'));
+  document.getElementById('btn-export-grafico5').addEventListener('click', () => exportChart('grafico5Canvas'));
+  document.getElementById('btn-export-grafico6').addEventListener('click', () => exportChart('grafico6Canvas'));
+  document.getElementById('btn-export-grafico7').addEventListener('click', () => exportChart('grafico7Canvas'));
+  document.getElementById('btn-export-grafico8').addEventListener('click', () => exportChart('grafico8Canvas'));
+  document.getElementById('btn-export-grafico9').addEventListener('click', () => exportChart('grafico9Canvas'));
+  document.getElementById('btn-export-grafico10').addEventListener('click', () => exportChart('grafico10Canvas'));
+  document.getElementById('btn-export-grafico11').addEventListener('click', () => exportChart('grafico11Canvas'));
+});
+    </script>
+</body>
+
+</html>
