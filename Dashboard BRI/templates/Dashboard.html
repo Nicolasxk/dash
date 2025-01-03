@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Página Simples</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='Dashboard.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+</head>
+<body class="bg-light">
+    <header class="header">
+        <h1 class="title">Cabeçalho</h1>
+        <form id="upload-form" action="/upload" method="POST" enctype="multipart/form-data">
+            <button type="button" id="btn-import" class="button">Importar</button>
+            </form>
+            <input type="file" id="file-input" style="display: none;" accept=".csv, .xlsx">
+
+    </header>
+
+    <main class="content">
+        <div class="row">
+            <div class="box box-square">
+                <h1>Previsão total de entrantes</h1>
+                <i class="fas fa-download download-icon" id="btn-export-grafico1"></i>
+                <canvas id="grafico1Canvas"></canvas>
+            </div>
+            <div class="box box-square">
+                <h1>Entrantes</h1>
+                <i class="fas fa-download download-icon" id="btn-export-grafico2"></i>
+                <canvas id="grafico2Canvas"></canvas>
+            </div>
+            <div class="box box-square">
+                <h1>Total Ano vs Ano</h1>
+                <i class="fas fa-download download-icon" id="btn-export-grafico3"></i>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="box box-square">
+                <h1>comparativo Ano vs Ano</h1>
+                <i class="fas fa-download download-icon" id="btn-export-grafico4"></i>
+                <canvas id="grafico4Canvas"></canvas>
+            </div>
+            <div class="box box-square">
+                <h1>previsão por Categoria</h1>
+                <i class="fas fa-download download-icon" id="btn-export-grafico5"></i>
+                <canvas id="grafico5Canvas"></canvas>
+            </div>
+            <div class="box box-square">
+                <h1>total de previsão para o proximo mês</h1>
+                <i class="fas fa-download download-icon" id="btn-export-grafico6"></i>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="box box-rectangle">
+                <h1>proximos eventos</h1>
+                <i class="fas fa-download download-icon" id="btn-export-grafico7"></i>
+                <canvas id="grafico7Canvas"></canvas>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="box box-rectangle">
+                <h1>dados diarizados de entrantes total</h1>
+                <i class="fas fa-download download-icon" id="btn-export-grafico8"></i>
+                <canvas id="grafico8Canvas"></canvas>
+            </div>
+        </div>
+    </main>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+
+</html>
