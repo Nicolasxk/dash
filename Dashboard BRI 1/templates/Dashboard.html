@@ -14,10 +14,10 @@
 <body class="bg-light">
     <header class="header">
         <h1 class="title">Cabeçalho</h1>
-        <form id="upload-form" method="POST" enctype="multipart/form-data">
-            <label for="file-input" class="button" id="btn-import" type="button">Importar</label>
-            <input type="file" id="file-input" style="display: none;" accept=".csv, .xlsx" name="file">
-        </form>
+            <form id="upload-form" method="POST" enctype="multipart/form-data">
+                <button class="button" id="btn-import" type="submit">Importar</button>
+               <input type="file" id="file-input"  accept=".csv, .xlsx" name="file" class="hidden-file-input">
+            </form>
 
     </header>
 
@@ -33,6 +33,7 @@
             </div>
             <div class="box box-square">
                 <h1>Total Ano vs Ano</h1>
+                  <canvas id="grafico3Canvas"></canvas>
             </div>
         </div>
 
@@ -47,6 +48,7 @@
             </div>
             <div class="box box-square">
                 <h1>total de previsão para o proximo mês</h1>
+                 <canvas id="grafico6Canvas"></canvas>
             </div>
         </div>
 
@@ -66,5 +68,4 @@
     </main>
     <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
-
 </html>

@@ -111,3 +111,9 @@ h1 {
     -webkit-text-fill-color: transparent;
     font-size: 15px;
 }
+
+.hidden-file-input {
+    position: absolute;
+    opacity: 0;
+    z-index: -1;
+}
