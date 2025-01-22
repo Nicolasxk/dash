@@ -1,0 +1,133 @@
+import streamlit as st
+
+def main():
+    st.set_page_config(layout="wide")
+
+    # --- CSS Customizado ---
+    st.markdown(
+        """
+        <style>
+        .stContainer {
+            margin-bottom: 10px; /* Espaço entre os painéis */
+        }
+
+         .data-panel-container {
+            margin: 5px;
+        }
+
+        .data-panel {
+            background-color: #1a202c; /* Cor de fundo */
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center; /* Centralizar o conteúdo */
+            box-sizing: border-box; /* Garantir que o padding não aumente o tamanho */
+            height: 120px; /* Altura */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        .data-panel h3 {
+            color: #aaa;
+            font-size: 0.9em;
+            margin: 0;
+        }
+        .data-panel h1 {
+            color: white;
+            font-size: 2em;
+            margin: 0;
+        }
+        .box-panel {
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+
+         }
+
+        #graph-panel {
+            border: 1px solid #FFD700;
+            height: 300px; /* Altura maior para os painéis de gráficos */
+         }
+        
+         #number-panel{
+            height:150px;
+         }
+
+         #rectangle-panel{
+            border: 1px solid #FFD700;
+            height:250px;
+         }
+         #calendar-panel{
+            border: 1px solid #FFD700;
+            height:250px;
+         }
+         #square-panel{
+            border: 1px solid #FFD700;
+            height:250px;
+         }
+        </style>
+         """, unsafe_allow_html=True
+    )
+    
+    # --- FILTERS SIDEBAR ---
+    with st.sidebar:
+        st.header("Filtros")
+    
+    # --- MAIN CONTENT AREA ---
+    # Linha 1: 3 painéis
+    cols1 = st.columns(3)
+    for i in range(3):
+        with cols1[i]:
+            with st.container():
+                st.markdown(f'<div class="data-panel-container"><div class="data-panel"><h3>Painel {i+1}</h3><h1>{i+1}</h1></div></div>', unsafe_allow_html=True)
+
+
+    # Linha 2: 7 painéis
+    cols2 = st.columns(7)
+    for i in range(7):
+        with cols2[i]:
+            with st.container():
+                st.markdown(f'<div class="data-panel-container"><div class="data-panel"><h3>Painel {i+4}</h3><h1>{i+4}</h1></div></div>', unsafe_allow_html=True)
+
+
+    # Linha 3: 7 painéis
+    cols3 = st.columns(7)
+    for i in range(7):
+        with cols3[i]:
+            with st.container():
+               st.markdown(f'<div class="data-panel-container"><div class="data-panel"><h3>Painel {i+11}</h3><h1>{i+11}</h1></div></div>', unsafe_allow_html=True)
+
+
+    # Linha 4: 2 painéis grandes para gráficos
+    cols4 = st.columns(2)
+    with cols4[0]:
+        with st.container():
+            st.markdown(f'<div class="box-panel"><div id="graph-panel">Gráfico 1</div></div>', unsafe_allow_html=True)
+
+
+    with cols4[1]:
+         with st.container():
+             st.markdown(f'<div class="box-panel"><div id="graph-panel">Gráfico 2</div></div>', unsafe_allow_html=True)
+
+
+    # Linha 5: 1 painel retangular
+    with st.container():
+        st.markdown(f'<div class="box-panel"><div id="rectangle-panel">Retângulo 1</div></div>', unsafe_allow_html=True)
+
+
+    # Linha 6: 1 painel retangular
+    with st.container():
+         st.markdown(f'<div class="box-panel"><div id="rectangle-panel">Retângulo 2</div></div>', unsafe_allow_html=True)
+
+    # Linha 7: 2 painéis, um calendário e um quadrado
+    cols5 = st.columns(2)
+    with cols5[0]:
+         with st.container():
+           st.markdown(f'<div class="box-panel"><div id="calendar-panel">Calendário</div></div>', unsafe_allow_html=True)
+
+
+    with cols5[1]:
+         with st.container():
+             st.markdown(f'<div class="box-panel"><div id="square-panel">Painel Quadrado</div></div>', unsafe_allow_html=True)
+
+if __name__ == "__main__":
+    main()
