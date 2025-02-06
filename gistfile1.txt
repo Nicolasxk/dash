@@ -6,42 +6,107 @@ import calendar
 import os
 import io
 import base64
-import xlsxwriter
 
 st.set_page_config(layout="wide")
 
-# Função para carregar e preparar o DataFrame
+def convert_brazilian_number(val):
+    """
+    Converte um valor que pode vir no formato brasileiro para float.
+    Se o valor contiver vírgula, assume que é o separador decimal e
+    remove os pontos (separadores de milhares). Caso não haja vírgula, 
+    se houver exatamente um ponto e os três dígitos após o ponto, 
+    assume que o ponto é separador de milhares e o remove.
+    """
+    try:
+        if isinstance(val, (int, float)):
+            return float(val)
+        val_str = str(val).strip()
+        if ',' in val_str:
+            val_str = val_str.replace('.', '').replace(',', '.')
+            return float(val_str)
+        elif '.' in val_str:
+            parts = val_str.split('.')
+            if len(parts) == 2 and len(parts[1]) == 3:
+                val_str = parts[0] + parts[1]
+                return float(val_str)
+            else:
+                return float(val_str)
+        else:
+            return float(val_str)
+    except Exception:
+        return 0.0
+
 @st.cache_data
 def load_and_preprocess_data():
     try:
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        excel_file_path = os.path.join(script_dir, 'forecast_Fevereiro(Previsoes).csv')
-        df = pd.read_csv(excel_file_path, encoding='latin-1')
+        csv_file_path = os.path.join(script_dir, 'forecast_Fevereiro.csv')
+        
+        # O arquivo CSV possui as seguintes colunas:
+        # "ds", "y", "cat_cancelamento", "cat_informação", "cat_reclamação",
+        # "cat_troca", "cat_preventiva", "cat_pré-venda", "cat_solicitação"
+        # Definimos os conversores utilizando os nomes originais (com acentos)
+        converters = {
+            "cat_cancelamento": convert_brazilian_number,
+            "cat_informação": convert_brazilian_number,
+            "cat_reclamação": convert_brazilian_number,
+            "cat_troca": convert_brazilian_number,
+            "cat_preventiva": convert_brazilian_number,
+            "cat_pré-venda": convert_brazilian_number,
+            "cat_solicitação": convert_brazilian_number
+        }
+        
+        # Definimos as colunas a serem lidas conforme o cabeçalho do CSV
+        columns_to_use = [
+            "ds",
+            "y",
+            "cat_cancelamento",
+            "cat_informação",
+            "cat_reclamação",
+            "cat_troca",
+            "cat_preventiva",
+            "cat_pré-venda",
+            "cat_solicitação"
+        ]
+        
+        # Lê o CSV utilizando encoding "latin1" e separador ponto e vírgula
+        df = pd.read_csv(csv_file_path, usecols=columns_to_use, converters=converters, encoding="latin1", sep=";")
         df = df.fillna(0)
+        
+        # Renomeia as colunas para remover os acentos e padronizar os nomes
         df.rename(columns={
-            "cat_cancelamento": "cancelamento",
-            "cat_informação": "informacao",
-            "cat_reclamação": "reclamacao",
-            "cat_troca": "troca",
-            "cat_preventiva": "preventiva",
-            "cat_pré-venda": "pre-venda",
-            "cat_solicitação": "solicitacao"
+            "y": "total",
+            "cat_informação": "cat_informacao",
+            "cat_reclamação": "cat_reclamacao",
+            "cat_pré-venda": "cat_pre_venda",
+            "cat_solicitação": "cat_solicitacao"
         }, inplace=True)
-        df['ds'] = pd.to_datetime('today')
+        
+        # Converter a coluna de datas e criar colunas auxiliares
+        df['ds'] = pd.to_datetime(df['ds'], errors='coerce')
+        df['ds_normalized'] = df['ds'].dt.normalize()
         df['year'] = df['ds'].dt.year
         df.loc[:, 'year'] = df['year'].replace({np.nan: None})
         df['month'] = df['ds'].dt.month
-        cols_to_convert = ['cancelamento', 'preventiva', 'reclamacao', 'troca',
-                           'informacao', 'solicitacao', 'pre-venda']
-        df[cols_to_convert] = df[cols_to_convert].apply(pd.to_numeric, errors='coerce')
-        df[cols_to_convert] = df[cols_to_convert].fillna(0)
-        df['y_previsto'] = df[cols_to_convert].sum(axis=1)
+
+        # Lista de colunas numéricas para somar (utilizando os nomes já renomeados)
+        cols_to_sum = [
+            "cat_cancelamento",
+            "cat_informacao",
+            "cat_reclamacao",
+            "cat_troca",
+            "cat_preventiva",
+            "cat_pre_venda",
+            "cat_solicitacao"
+        ]
+        df[cols_to_sum] = df[cols_to_sum].apply(pd.to_numeric, errors='coerce').fillna(0)
+        df['y_previsto'] = df[cols_to_sum].sum(axis=1)
         return df
     except FileNotFoundError:
-        st.error("Erro: 'forecast_Fevereiro(Previsoes).csv' não encontrado.")
+        st.error("Erro: 'forecast_Fevereiro.csv' não encontrado.")
         st.stop()
     except Exception as e:
-        st.error(f"Ocorreu um erro ao ler o arquivo excel: {e}")
+        st.error(f"Ocorreu um erro ao ler o arquivo CSV: {e}")
         st.stop()
 
 df = load_and_preprocess_data()
@@ -54,11 +119,11 @@ CSS = """
     .data-panel {
         text-align: center;
         box-sizing: border-box;
-         transition: background-color 0.3s ease;
-         margin-bottom: 10px;
-          border: 1px solid #444; /* Use subtle gray for border */
-          padding: 5px; /* Add padding for better spacing */
-           border-radius: 5px; /* Add border radius */
+        transition: background-color 0.3s ease;
+        margin-bottom: 10px;
+        border: 1px solid #444;
+        padding: 5px;
+        border-radius: 5px;
     }
     .data-panel:hover {
         background-color: #364156;
@@ -66,40 +131,19 @@ CSS = """
     }
     .data-panel h3 { color: #aaa; font-size: 0.9em; margin: 0; }
     .data-panel h1 { color: white; font-size: 2em; margin: 0; }
-     .data-panel p {
-        color: #ddd;
-        font-size: 0.8em;
-         margin: 0;
-    }
-    .box-panel {
-        padding: 10px;
-        border-radius: 5px;
-        margin-bottom: 10px;
-        background-color: #2d3748;
-    }
-    .graph-container {
-        border: 1px solid #666; /* Adjust the border color for the graphs container */
-        height: 300px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        overflow: hidden;
-    }
-    .chart-wrapper {
-      height: 100%;
-       display: flex;
-    }
+    .data-panel p { color: #ddd; font-size: 0.8em; margin: 0; }
+    .box-panel { padding: 10px; border-radius: 5px; margin-bottom: 10px; background-color: #2d3748; }
+    .graph-container { border: 1px solid #666; height: 300px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    .chart-wrapper { height: 100%; display: flex; }
     #number-panel { height: 150px; }
-    #rectangle-panel { border: 1px solid #666; height: 250px; } /* Adjust the border color for the rectangle panel */
-    #calendar-panel { border: 1px solid #666; height: 250px; } /* Adjust the border color for the calendar panel */
-    #square-panel { border: 1px solid #666; height: 250px; } /* Adjust the border color for the square panel */
-    h2 { font-size: 2em; } /* Increase dashboard title size */
+    #rectangle-panel { border: 1px solid #666; height: 250px; }
+    #calendar-panel { border: 1px solid #666; height: 250px; }
+    #square-panel { border: 1px solid #666; height: 250px; }
+    h2 { font-size: 2em; }
 </style>
 """
 
-
 def display_data_panels(num_panels, data_dict=None):
-    """Exibe uma linha de painéis de dados com conteúdo dinâmico opcional."""
     cols = st.columns(num_panels)
     with st.container():
         st.markdown('<div class="panel-row">', unsafe_allow_html=True)
@@ -109,34 +153,25 @@ def display_data_panels(num_panels, data_dict=None):
                     panel_num = i + 1
                     if data_dict and panel_num in data_dict:
                         title, value, subtext = data_dict[panel_num]
-                        # Formatar números com vírgulas e remover casas decimais
-                        if isinstance(value, (int, float)):
-                            formatted_value = f"{value:,.0f}"
-                        else:
-                            formatted_value = value
+                        formatted_value = f"{value:,.0f}" if isinstance(value, (int, float)) else value
                         st.markdown(f'''
                         <div class="data-panel">
-                        <h3>{title}</h3>
-                        <h1>{formatted_value}</h1>
-                        <p>{subtext}</p>
+                          <h3>{title}</h3>
+                          <h1>{formatted_value}</h1>
+                          <p>{subtext}</p>
                         </div>
-                        ''',
-                                    unsafe_allow_html=True)
+                        ''', unsafe_allow_html=True)
                     else:
                         st.markdown(
                             f'<div class="data-panel"><h3>Painel {panel_num}</h3><h1>{panel_num}</h1></div>',
                             unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-
 def create_total_sum_bar_chart(filtered_df, categories):
-    """Cria e retorna um gráfico de barras da soma total por categoria."""
     if filtered_df.empty:
         return px.bar(title="Sem dados para exibir")
-
     for col in categories:
         filtered_df[col] = pd.to_numeric(filtered_df[col], errors='coerce')
-
     category_sums = filtered_df[categories].sum().reset_index()
     category_sums.columns = ['category', 'total']
     fig = px.bar(category_sums, x='category', y='total',
@@ -145,69 +180,54 @@ def create_total_sum_bar_chart(filtered_df, categories):
     fig.update_layout(height=400, title_x=0.5, margin=dict(b=100))
     return fig
 
-
 def create_daily_sum_bar_charts(filtered_df, categories):
-    """Cria um gráfico de linha com a soma diária de todas as categorias nos últimos 7 dias."""
-    if filtered_df.empty:
-        return px.bar(title="Sem dados para exibir nos últimos 7 dias",
-                    x=[pd.to_datetime('today') - pd.Timedelta(days=6), pd.to_datetime('today')], y=[0, 1])
-
+    df_temp = filtered_df.copy()
+    max_date = df_temp['ds_normalized'].max()
+    last_7_days = pd.date_range(end=max_date, periods=7, freq='D')
+    df_temp = df_temp[df_temp['ds_normalized'].isin(last_7_days)]
+    if df_temp.empty:
+        return px.bar(title="Sem dados para exibir nos últimos 7 dias")
     try:
-        max_date = filtered_df['ds'].max()
-        last_7_days = pd.date_range(end=max_date, periods=7, freq='D')
-
-        filtered_df_7days = filtered_df[filtered_df['ds'].isin(last_7_days)].copy()
-        
         for col in categories:
-             filtered_df_7days[col] = pd.to_numeric(filtered_df_7days[col], errors='coerce')
-
-        daily_counts = filtered_df_7days.groupby('ds')[categories].sum().reset_index()
+            df_temp[col] = pd.to_numeric(df_temp[col], errors='coerce')
+        daily_counts = df_temp.groupby('ds_normalized')[categories].sum().reset_index()
         daily_counts['daily_sum'] = daily_counts[categories].sum(axis=1)
-        
-        fig = px.line(daily_counts, x='ds', y='daily_sum',
-                    title='Contagem Diária de Casos (Últimos 7 Dias)',
-                    color_discrete_sequence=px.colors.qualitative.Pastel)
+        daily_df = daily_counts[['ds_normalized', 'daily_sum']].copy()
+        fig = px.bar(daily_df, x='ds_normalized', y='daily_sum',
+                     title='Contagem Diária de Casos (Últimos 7 Dias)',
+                     color_discrete_sequence=px.colors.qualitative.Pastel)
         fig.update_layout(height=400, title_x=0.5, margin=dict(b=100))
         return fig
     except Exception as e:
-         return px.bar(title=f"Sem dados para exibir nos últimos 7 dias. (Erro:{e})",
-                x=[pd.to_datetime('today') - pd.Timedelta(days=6), pd.to_datetime('today')], y=[0, 1])
+        return px.bar(title=f"Sem dados para exibir nos últimos 7 dias. (Erro: {e})",
+                      x=[pd.to_datetime('today') - pd.Timedelta(days=6), pd.to_datetime('today')], y=[0, 1])
 
-
-def create_big_bar_chart(filtered_df, categories):
-    """Cria e retorna um gráfico de linha grande com os dados do último mês."""
-    if filtered_df.empty:
-          max_date = df['ds'].max()
-          first_day_month = max_date.replace(day=1)
-          return px.bar(title=f"Sem dados para exibir no último mês.",
-                x=[first_day_month, max_date], y=[0,1])
-
+def create_big_bar_chart(filtered_df):
+    df_temp = filtered_df.copy()
+    max_date = df_temp['ds_normalized'].max()
+    first_day_month = max_date.replace(day=1)
+    df_temp = df_temp[df_temp['ds_normalized'] >= first_day_month].copy()
+    if df_temp.empty:
+        return px.bar(title="Sem dados para exibir no último mês",
+                      x=[first_day_month, max_date], y=[0, 1])
     try:
-        max_date = filtered_df['ds'].max()
-        first_day_month = max_date.replace(day=1)
-        
-        filtered_df_month = filtered_df[filtered_df['ds'] >= first_day_month].copy()
-        
-        for col in categories:
-             filtered_df_month[col] = pd.to_numeric(filtered_df_month[col], errors='coerce')
-
-        daily_counts = filtered_df_month.groupby('ds')[categories].sum().reset_index()
-        daily_counts['monthly_sum'] = daily_counts[categories].sum(axis=1)
-
-        fig = px.line(daily_counts, x='ds', y='monthly_sum',
+        pie_categories = ['cat_cancelamento', 'cat_informacao', 'cat_reclamacao',
+                            'cat_troca', 'cat_preventiva', 'cat_pre_venda', 'cat_solicitacao']
+        for col in pie_categories:
+            df_temp[col] = pd.to_numeric(df_temp[col], errors='coerce')
+        daily_counts = df_temp.groupby('ds_normalized')[pie_categories].sum().reset_index()
+        daily_counts['monthly_sum'] = daily_counts[pie_categories].sum(axis=1)
+        daily_df = daily_counts[['ds_normalized', 'monthly_sum']].copy()
+        fig = px.bar(daily_df, x='ds_normalized', y='monthly_sum',
                      title='Contagem Diária de Casos (1 Mês)',
                      color_discrete_sequence=px.colors.qualitative.Pastel)
         fig.update_layout(height=400, title_x=0.5, margin=dict(b=100))
         return fig
     except Exception as e:
-         max_date = df['ds'].max()
-         first_day_month = max_date.replace(day=1)
-         return px.bar(title=f"Sem dados para exibir no último mês. (Erro: {e})",
-                x=[first_day_month, max_date], y=[0,1])
-
+        return px.bar(title=f"Sem dados para exibir no último mês. (Erro: {e})",
+                      x=[first_day_month, max_date], y=[0, 1])
 
 def generate_download_link(filtered_df, file_format):
-    """Gera um link para download do DataFrame."""
     if file_format == 'csv':
         output = io.StringIO()
         filtered_df.to_csv(output, index=False, encoding='utf-8')
@@ -215,34 +235,27 @@ def generate_download_link(filtered_df, file_format):
         b64 = base64.b64encode(csv_data.encode()).decode()
         return f'<a href="data:file/csv;base64,{b64}" download="dashboard_data.csv">Baixar CSV</a>'
     elif file_format == 'xlsx':
-         output = io.BytesIO()
-         
-         # Retira as colunas year e month do dataframe para exportar somente as corretas
-         df_export = filtered_df.copy()
-         df_export = df_export.drop(columns = ['year', 'month', 'y_previsto'])
-         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        output = io.BytesIO()
+        df_export = filtered_df.copy()
+        df_export = df_export.drop(columns=['year', 'month', 'y_previsto', 'ds_normalized'])
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             df_export.to_excel(writer, index=False, sheet_name='Dashboard Data')
-
-            # Formatação do cabeçalho
-            header_format = writer.book.add_format({'bold': True, 'text_wrap': True, 'valign': 'top', 'align': 'center'})
-
-            # Ajuste automático de largura das colunas
+            header_format = writer.book.add_format({
+                'bold': True, 'text_wrap': True, 'valign': 'top', 'align': 'center'
+            })
             for column in df_export.columns:
                 column_width = max(df_export[column].astype(str).map(len).max(), len(column))
                 col_idx = df_export.columns.get_loc(column)
                 writer.sheets['Dashboard Data'].set_column(col_idx, col_idx, column_width + 2)
-
-         xlsx_data = output.getvalue()
-         b64 = base64.b64encode(xlsx_data).decode()
-         return f'<a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download="dashboard_data.xlsx">Baixar XLSX</a>'
+        xlsx_data = output.getvalue()
+        b64 = base64.b64encode(xlsx_data).decode()
+        return f'<a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download="dashboard_data.xlsx">Baixar XLSX</a>'
     else:
         return ""
 
-
 def main():
     st.markdown(CSS, unsafe_allow_html=True)
-
-    # --- Sidebar ---
+    
     available_years = df["year"].dropna().unique()
     selected_years = st.sidebar.multiselect(
         key=1,
@@ -250,91 +263,59 @@ def main():
         options=available_years,
         default=available_years.tolist() if len(available_years) > 0 else []
     )
-
-    # --- Define categories ---
-    categories = [col for col in df.columns if col not in ['ds', 'y', 'year', 'month', 'y_previsto']]
-
-    # --- Data Filtering ---
-    pie_categories = ['cancelamento_previsto', 'preventiva_previsto', 'reclamacao_previsto',
-                      'troca_previsto', 'informacao_previsto', 'solicitacao_previsto', 'pre-venda_previsto']
-
+    
+    # Utiliza os nomes das colunas conforme lidos e renomeados
+    categories = [col for col in df.columns if col not in ['ds', 'y_previsto', 'year', 'month', 'ds_normalized']]
+    
     if selected_years:
         filtered_df = df[df['year'].isin(selected_years)].copy()
     else:
         filtered_df = df.copy()
 
-    # --- Data Panel Content ---
-    total_cases = 226781
-    
-    total_months = 0
-    if not filtered_df.empty and 'month' in filtered_df.columns:
-      total_months = filtered_df['month'].nunique()
-      
-    max_month = 1
-    if not filtered_df['month'].dropna().empty and 'month' in filtered_df.columns:
-      max_month = int(filtered_df['month'].max())
-    min_month = 1
-    if not filtered_df['month'].dropna().empty and 'month' in filtered_df.columns:
-      min_month = int(filtered_df['month'].min())
+    fig_total_sum = create_total_sum_bar_chart(filtered_df, categories)
+    fig_daily_sum = create_daily_sum_bar_charts(filtered_df, categories)
+    fig_big_bar = create_big_bar_chart(filtered_df)
+
+    total_cases = filtered_df['y_previsto'].sum()
+    total_months = filtered_df['month'].nunique() if not filtered_df.empty else 0
+    max_month = int(filtered_df['month'].max()) if not filtered_df['month'].dropna().empty else 1
+    min_month = int(filtered_df['month'].min()) if not filtered_df['month'].dropna().empty else 1
 
     panel_data = {
         1: ("Total de Casos", total_cases, "Todas as Categorias"),
         2: ("Meses Ativos", total_months, "Total de Meses"),
         3: ("Média de Casos", total_cases / total_months if total_months != 0 else 'N/A', "Por Mês"),
-        4: ("Total de Cancelamentos", filtered_df['cat_cancelamento_previsto'].sum() if not filtered_df.empty else 0,
-            "Em Todo o Período"),
-        5: ("Total de Preventivas", filtered_df['cat_preventiva_previsto'].sum() if len(categories) > 1 and not filtered_df.empty else 0,
-            "Em Todo o Período"),
-        6: ("Total de Reclamações", filtered_df['cat_reclamacao_previsto'].sum() if len(categories) > 2 and not filtered_df.empty else 0,
-            "Em Todo o Período"),
-        7: ("Total de Trocas", filtered_df['cat_troca_previsto'].sum() if len(categories) > 3 and not filtered_df.empty else 0,
-            "Em Todo o Período"),
-        8: ("Total de Informação", filtered_df['cat_informacao_previsto'].sum() if len(categories) > 4 and not filtered_df.empty else 0,
-            "Em Todo o Período"),
-        9: ("Total de Solicitações", filtered_df['cat_solicitacao_previsto'].sum() if len(categories) > 5 and not filtered_df.empty else 0,
-            "Em Todo o Período"),
-        10: ("Total de Pré-Venda", filtered_df['cat_pre-venda_previsto'].sum() if len(categories) > 6 and not filtered_df.empty else 0,
-             "Em Todo o Período"),
-        11: ("Último Mês", calendar.month_name[max_month] if max_month else 'N/A', "Atual"),
-        12: ("Primeiro Mês", calendar.month_name[min_month] if min_month else 'N/A', "Histórico"),
+        4: ("Total de Cancelamentos", filtered_df['cat_cancelamento'].sum() if not filtered_df.empty else 0, "Em Todo o Período"),
+        5: ("Total de Preventivas", filtered_df['cat_preventiva'].sum() if not filtered_df.empty else 0, "Em Todo o Período"),
+        6: ("Total de Reclamações", filtered_df['cat_reclamacao'].sum() if not filtered_df.empty else 0, "Em Todo o Período"),
+        7: ("Total de Trocas", filtered_df['cat_troca'].sum() if not filtered_df.empty else 0, "Em Todo o Período"),
+        8: ("Total de Informação", filtered_df['cat_informacao'].sum() if not filtered_df.empty else 0, "Em Todo o Período"),
+        9: ("Total de Solicitações", filtered_df['cat_solicitacao'].sum() if not filtered_df.empty else 0, "Em Todo o Período"),
+        10: ("Total de Pré-Venda", filtered_df['cat_pre_venda'].sum() if not filtered_df.empty else 0, "Em Todo o Período"),
+        11: ("Último Mês", calendar.month_name[max_month], "Atual"),
+        12: ("Primeiro Mês", calendar.month_name[min_month], "Histórico"),
         13: ("Ano", filtered_df['year'].dropna().max() if not filtered_df.empty else 'N/A', "Atual"),
         14: ("Última Semana", filtered_df['ds'].max().strftime('%Y-%m-%d') if not filtered_df.empty else 'N/A', "Atual"),
     }
 
-    # --- Layout ---
     display_data_panels(3, panel_data)
     display_data_panels(7, panel_data)
     display_data_panels(7, panel_data)
 
     cols4 = st.columns(2)
-
-    # ---  Gráficos ---
     with cols4[0]:
-         if not filtered_df.empty:
-            st.plotly_chart(create_total_sum_bar_chart(filtered_df, categories), use_container_width=True)
-         else:
-             st.plotly_chart(px.bar(title='Selecione um ano para exibir o gráfico', y=[0, 1], x=[0,1]), use_container_width=True)
-
+        st.plotly_chart(fig_total_sum, use_container_width=True)
     with cols4[1]:
-        if not filtered_df.empty:
-            st.plotly_chart(create_daily_sum_bar_charts(filtered_df, categories), use_container_width=True)
-        else:
-             st.plotly_chart(px.bar(title='Selecione um ano para exibir o gráfico', y=[0, 1], x=[0,1]), use_container_width=True)
-    
-    if not filtered_df.empty:
-        st.plotly_chart(create_big_bar_chart(filtered_df, categories), use_container_width=True)
-    else:
-         st.plotly_chart(px.bar(title='Selecione um ano para exibir o gráfico', y=[0, 1], x=[0,1]), use_container_width=True)
+        st.plotly_chart(fig_daily_sum, use_container_width=True)
+    st.plotly_chart(fig_big_bar, use_container_width=True)
 
-
-     # --- Botões de Download ---
     st.markdown("### Exportar Dados")
     download_format = st.radio("Selecione o formato:", ["csv", "xlsx"], horizontal=True)
-    if st.button("Gerar Link de Download"):                                                                                                                                                     
-         if not filtered_df.empty:                                                                                              
-          download_link = generate_download_link(filtered_df, download_format)
-          st.markdown(download_link, unsafe_allow_html=True)
-         else:
+    if st.button("Gerar Link de Download"):
+        if not filtered_df.empty:
+            download_link = generate_download_link(filtered_df, download_format)
+            st.markdown(download_link, unsafe_allow_html=True)
+        else:
             st.warning("Nenhum dado para exportar.")
 
 if __name__ == "__main__":
