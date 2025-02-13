@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import numpy as np
-import calendar
 import os
 import io
 import base64
@@ -13,8 +12,11 @@ st.set_page_config(layout="wide")
 @st.cache_data
 def load_and_preprocess_data():
     try:
+        # Caminho do arquivo CSV
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        csv_file_path = os.path.join(script_dir, 'forecast_Fevereiro(Previsoes).csv')
+        csv_file_path = os.path.join(script_dir, 'forecast_Fevereiro.csv')
+        
+        # Leitura e renomeação das colunas
         df = pd.read_csv(csv_file_path, encoding="latin1", sep=";")
         df.rename(columns={
             "y": "total",
@@ -23,15 +25,18 @@ def load_and_preprocess_data():
             "cat_pré-venda": "cat_pre_venda",
             "cat_solicitação": "cat_solicitacao"
         }, inplace=True)
-
+        
+        # Conversão de datas
         df['ds'] = pd.to_datetime(df['ds'], errors='coerce')
         df['ds_normalized'] = df['ds'].dt.normalize()
         df['year'] = df['ds'].dt.year
         df.loc[:, 'year'] = df['year'].replace({np.nan: None})
         df['month'] = df['ds'].dt.month
-
+        
+        # Seleciona apenas o mês de fevereiro (mês == 2)
         df = df[df['month'] == 2]
-
+        
+        # Converte as colunas de categorias e total para numérico
         cols_to_sum = [
             "cat_cancelamento",
             "cat_informacao",
@@ -44,9 +49,21 @@ def load_and_preprocess_data():
         for col in cols_to_sum:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
         df['total'] = pd.to_numeric(df['total'], errors='coerce').fillna(0)
+        
+        # Ajuste: Reescala as categorias para que a soma por linha seja igual ao total
+        df['sum_categories'] = df[cols_to_sum].sum(axis=1)
+        # Apenas ajuste se a soma das categorias não for aproximadamente igual ao total
+        mask = (df['sum_categories'] > 0) & (~np.isclose(df['sum_categories'], df['total']))
+        df.loc[mask, cols_to_sum] = (
+            df.loc[mask, cols_to_sum]
+            .multiply(df.loc[mask, 'total'], axis=0)
+            .div(df.loc[mask, 'sum_categories'], axis=0)
+        )
+        df.drop(columns='sum_categories', inplace=True)
+        
         return df
     except FileNotFoundError:
-        st.error("Erro: 'forecast_Fevereiro.csv' não encontrado.")
+        st.error("Erro: 'forecast_Fevereiro(Previsoes).csv' não encontrado.")
         st.stop()
     except Exception as e:
         st.error(f"Ocorreu um erro ao ler o arquivo CSV: {e}")
@@ -64,84 +81,75 @@ CSS = """
         box-sizing: border-box;
         transition: background-color 0.3s ease;
         margin-bottom: 10px;
-        background-color: transparent; /* Fundo transparente */
+        background-color: transparent;
         padding: 5px;
         border-radius: 5px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.2); /* Sombra sutil */
+        box-shadow: 0 4px 6px rgba(0,0,0,0.2);
     }
-
-    {
-    .tittle-color: #white;
-    }
-
     .data-panel:hover {
-        background-color: rgba(0,0,0,0.1); /* Fundo levemente escurecido ao passar o mouse */
-        cursor: pointer;S
+        background-color: rgba(0,0,0,0.1);
+        cursor: pointer;
     }
-    .data-panel h3 { color: #ffffff; font-size: 0.9em; margin: 0; } /* Cor do título */
-    .data-panel h1 { color: #ffffff; font-size: 2em; margin: 0; } /* Cor do valor */
-    .data-panel p { color #ffffff; font-size: 0.8em; margin: 0; } /* Cor do subtexto */
+    .data-panel h3 { color: #ffffff; font-size: 0.9em; margin: 0; }
+    .data-panel h1 { color: #ffffff; font-size: 2em; margin: 0; }
+    .data-panel p { color: #ffffff; font-size: 0.8em; margin: 0; }
     .box-panel {
         border-radius: 5px;
         padding: 10px;
         margin-bottom: 20px;
-        border: 1px solid rgba(0, 0, 0, 0.2); /* Borda suave */
-        box-shadow: 0 4px 6px rgba(0,0,0,0.2); /* Sombra suave */
+        border: 1px solid rgba(0, 0, 0, 0.2);
+        box-shadow: 0 4px 6px rgba(0,0,0,0.2);
     }
     .graph-container { border: 1px solid #666; height: 300px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
     .chart-wrapper { height: 100%; display: flex; }
-    #number-panel { height: 150px; }
-    #rectangle-panel { border: 1px solid #666; height: 250px; }
-    #calendar-panel { border: 1px solid #666; height: 250px; }
-    #square-panel { border: 1px solid #666; }
     h2 { font-size: 2em; }
-     .plotly-chart { margin-bottom: 20px; } /* Espaçamento entre os gráficos */
+    .plotly-chart { margin-bottom: 20px; }
 </style>
 """
+st.markdown(CSS, unsafe_allow_html=True)
 
+# Função para exibir os painéis de dados
 def display_data_panels(num_panels, data_dict=None):
     cols = st.columns(num_panels)
     with st.container():
         st.markdown('<div class="panel-row">', unsafe_allow_html=True)
         for i, col in enumerate(cols):
             with col:
-                with st.container():
-                    panel_num = i + 1
-                    if data_dict and panel_num in data_dict:
-                        title, value, subtext = data_dict[panel_num]
-                        formatted_value = f"{value:,.0f}" if isinstance(value, (int, float)) else value
-                        st.markdown(f'''
+                panel_num = i + 1
+                if data_dict and panel_num in data_dict:
+                    title, value, subtext = data_dict[panel_num]
+                    # Arredonda para a casa dos mil e não utiliza vírgulas
+                    formatted_value = f"{round(value, -3):.0f}" if isinstance(value, (int, float)) else value
+                    st.markdown(f'''
                         <div class="data-panel">
                           <h3>{title}</h3>
                           <h1>{formatted_value}</h1>
                           <p>{subtext}</p>
                         </div>
-                        ''', unsafe_allow_html=True)
-                    else:
-                        st.markdown(
-                            f'<div class="data-panel"><h3>Painel {panel_num}</h3><h1>{panel_num}</h1></div>',
-                            unsafe_allow_html=True)
+                    ''', unsafe_allow_html=True)
+                else:
+                    st.markdown(
+                        f'<div class="data-panel"><h3>Painel {panel_num}</h3><h1>{panel_num}</h1></div>',
+                        unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-def create_total_sum_bar_chart(filtered_df, categories):
-    if filtered_df.empty:
+# As funções de gráfico permanecem as mesmas (utilizam os dados ajustados)
+def create_total_sum_bar_chart(data, categories):
+    if data.empty:
         fig = px.bar(title="Sem dados para exibir")
     else:
         for col in categories:
-            filtered_df[col] = pd.to_numeric(filtered_df[col], errors='coerce')
-        category_sums = filtered_df[categories].sum().reset_index()
-
-        # Rename the 'index' column to 'category'
+            data[col] = pd.to_numeric(data[col], errors='coerce')
+        category_sums = data[categories].sum().reset_index()
         category_sums.rename(columns={'index': 'category'}, inplace=True)
-
-        category_sums['category'] = category_sums['category'].str.replace('cat_', '')  # Remove "cat_"
+        category_sums['category'] = category_sums['category'].str.replace('cat_', '')
         category_sums.columns = ['category', 'total']
         fig = px.bar(category_sums, x='category', y='total',
                      title='Total de Casos por Categoria',
                      color_discrete_sequence=['#CD9A33'],
-                     text_auto=True)  # Show values on bars
+                     text_auto=True)
     fig.update_layout(
-        height=350,  # Reduzindo a altura
+        height=350,
         title_x=0.1,
         margin=dict(b=100),
         title_font=dict(color='white'),
@@ -155,8 +163,8 @@ def create_total_sum_bar_chart(filtered_df, categories):
     )
     return fig
 
-def create_daily_sum_bar_charts(filtered_df, categories):
-    df_temp = filtered_df.copy()
+def create_daily_sum_bar_charts(data, categories):
+    df_temp = data.copy()
     max_date = df_temp['ds_normalized'].max()
     last_7_days = pd.date_range(end=max_date, periods=7, freq='D')
     df_temp = df_temp[df_temp['ds_normalized'].isin(last_7_days)]
@@ -169,13 +177,13 @@ def create_daily_sum_bar_charts(filtered_df, categories):
             daily_counts = df_temp.groupby('ds_normalized')[categories].sum().reset_index()
             daily_counts['daily_sum'] = daily_counts[categories].sum(axis=1)
             daily_df = daily_counts[['ds_normalized', 'daily_sum']].copy()
-            daily_df.rename(columns={'ds_normalized': 'Dia'}, inplace=True)  # Rename column
+            daily_df.rename(columns={'ds_normalized': 'Dia'}, inplace=True)
             fig = px.bar(daily_df, x='Dia', y='daily_sum',
                          title='Contagem Diária de Casos (Últimos 7 Dias)',
                          color_discrete_sequence=['#CD9A33'],
-                         text_auto=True) # Show values on bars
+                         text_auto=True)
             fig.update_layout(
-                height=350,  # Reduzindo a altura
+                height=350,
                 title_x=0.1,
                 margin=dict(b=100),
                 title_font=dict(color='white'),
@@ -206,8 +214,8 @@ def create_daily_sum_bar_charts(filtered_df, categories):
     )
     return fig
 
-def create_big_bar_chart(filtered_df):
-    df_temp = filtered_df.copy()
+def create_big_bar_chart(data):
+    df_temp = data.copy()
     max_date = df_temp['ds_normalized'].max()
     first_day_month = max_date.replace(day=1)
     df_temp = df_temp[df_temp['ds_normalized'] >= first_day_month].copy()
@@ -222,14 +230,13 @@ def create_big_bar_chart(filtered_df):
             daily_counts = df_temp.groupby('ds_normalized')[pie_categories].sum().reset_index()
             daily_counts['monthly_sum'] = daily_counts[pie_categories].sum(axis=1)
             daily_df = daily_counts[['ds_normalized', 'monthly_sum']].copy()
-            daily_df.rename(columns={'ds_normalized': 'Dia'}, inplace=True)  # Rename column
+            daily_df.rename(columns={'ds_normalized': 'Dia'}, inplace=True)
             fig = px.bar(daily_df, x='Dia', y='monthly_sum',
                          title='Contagem Diária de Casos (1 Mês)',
                          color_discrete_sequence=['#CD9A33'],
-                         text_auto=True)  # Show values on bars
-
+                         text_auto=True)
             fig.update_layout(
-                height=350,  # Reduzindo a altura
+                height=350,
                 title_x=0.1,
                 margin=dict(b=100),
                 title_font=dict(color='white'),
@@ -259,42 +266,11 @@ def create_big_bar_chart(filtered_df):
     )
     return fig
 
-def generate_download_link(filtered_df, file_format):
-    if file_format == 'csv':
-        output = io.StringIO()
-        filtered_df.to_csv(output, index=False, encoding='utf-8')
-        csv_data = output.getvalue()
-        b64 = base64.b64encode(csv_data.encode()).decode()
-        return f'<a href="data:file/csv;base64,{b64}" download="dashboard_data.csv">Baixar CSV</a>'
-    elif file_format == 'xlsx':
-        output = io.BytesIO()
-        df_export = filtered_df.copy()
-        df_export = df_export.drop(columns=['year', 'month', 'ds_normalized'])
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            df_export.to_excel(writer, index=False, sheet_name='Dashboard Data')
-            header_format = writer.book.add_format({
-                'bold': True, 'text_wrap': True, 'valign': 'top', 'align': 'center',
-            })
-            for column in df_export.columns:
-                column_width = max(df_export[column].astype(str).map(len).max(), len(column))
-                col_idx = df_export.columns.get_loc(column)
-                writer.sheets['Dashboard Data'].set_column(col_idx, col_idx, column_width + 2)
-        xlsx_data = output.getvalue()
-        b64 = base64.b64encode(xlsx_data).decode()
-        return f'<a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download="dashboard_data.xlsx">Baixar XLSX</a>'
-    else:
-        return ""
-
-def create_30_day_category_line_chart(df):
-    """
-    Cria um gráfico de linha mostrando a contagem diária de cada categoria
-    nos últimos 30 dias.
-    """
-    df_temp = df.copy()
+def create_30_day_category_line_chart(data):
+    df_temp = data.copy()
     max_date = df_temp['ds_normalized'].max()
     last_30_days = pd.date_range(end=max_date, periods=30, freq='D')
     df_temp = df_temp[df_temp['ds_normalized'].isin(last_30_days)]
-
     if df_temp.empty:
         fig = px.line(title="Sem dados para exibir nos últimos 30 dias")
     else:
@@ -307,24 +283,16 @@ def create_30_day_category_line_chart(df):
             "cat_pre_venda",
             "cat_solicitacao"
         ]
-
-        # Garante que as colunas de categoria são numéricas
         for col in category_cols:
             df_temp[col] = pd.to_numeric(df_temp[col], errors='coerce').fillna(0)
-
-        # Agrupa por data e soma as contagens de cada categoria
         daily_counts = df_temp.groupby('ds_normalized')[category_cols].sum().reset_index()
         daily_counts = daily_counts.melt(id_vars='ds_normalized', var_name='category', value_name='count')
-
-        # Remove prefix "cat_" from category names
         daily_counts['category'] = daily_counts['category'].str.replace('cat_', '')
-
-        # Cria o gráfico de linha
         fig = px.line(daily_counts, x='ds_normalized', y='count', color='category',
                       title='Contagem Diária de Casos por Categoria (Últimos 30 Dias)',
-                      color_discrete_sequence=px.colors.qualitative.Pastel)  # Mantém cores diferentes
+                      color_discrete_sequence=px.colors.qualitative.Pastel)
     fig.update_layout(
-        height=350,  # Reduzindo a altura
+        height=350,
         title_x=0.1,
         margin=dict(b=100),
         title_font=dict(color='white'),
@@ -337,32 +305,20 @@ def create_30_day_category_line_chart(df):
     )
     return fig
 
-def create_daily_category_bar_chart(df, categories):
-    """
-    Cria um gráfico de colunas empilhadas mostrando a contagem diária de casos por categoria
-    para todos os dias do mês.
-    """
-    df_temp = df.copy()
-
+def create_daily_category_bar_chart(data, categories):
+    df_temp = data.copy()
     if df_temp.empty:
         fig = px.bar(title="Sem dados para exibir para o gráfico diário por categoria")
     else:
-        # Garante que as colunas de categoria são numéricas
         for col in categories:
             df_temp[col] = pd.to_numeric(df_temp[col], errors='coerce').fillna(0)
-
-        # Agrupa por data e soma as contagens de cada categoria
         daily_counts = df_temp.groupby('ds_normalized')[categories].sum().reset_index()
-
-        #Cria o gráfico de barras empilhadas
         fig = px.bar(daily_counts, x='ds_normalized', y=categories,
                      title='Contagem Diária de Casos por Categoria (Mês Completo)',
                      color_discrete_sequence=px.colors.qualitative.Pastel,
                      text_auto=True)
-
-        # Add text annotations to the bars
         fig.update_layout(
-            height=450,  # Aumentando a altura para melhor visualização
+            height=450,
             title_x=0.1,
             margin=dict(b=100),
             title_font=dict(color='white'),
@@ -375,158 +331,123 @@ def create_daily_category_bar_chart(df, categories):
             xaxis_title="Data",
             yaxis_title="Contagem de Casos",
         )
-
     return fig
 
-def main():
-    st.markdown(CSS, unsafe_allow_html=True)
+# -------------------- Cálculo das Métricas e Painéis --------------------
+# Lista de categorias (7 painéis superiores)
+categories = [
+    'cat_cancelamento', 'cat_informacao', 'cat_reclamacao',
+    'cat_troca', 'cat_preventiva', 'cat_pre_venda', 'cat_solicitacao'
+]
+first_7_categories = categories[:7]
 
-    # Utiliza os nomes das colunas conforme lidos e renomeados
-    categories = ['cat_cancelamento', 'cat_informacao', 'cat_reclamacao',
-                                'cat_troca', 'cat_preventiva', 'cat_pre_venda', 'cat_solicitacao']
-    first_7_categories = categories[:7]
+if not df.empty:
+    # Soma de cada categoria (já ajustada)
+    category_totals = {cat: df[cat].sum() for cat in first_7_categories}
+    total_cases = df['total'].sum()
+    total_days = df['ds_normalized'].nunique()
+    average_cases_per_day = total_cases / total_days if total_days != 0 else 0
 
-    # -------------------- Sidebar Filters --------------------
-    st.sidebar.header("Filtros")
+    # Painéis: 7 superiores para cada categoria e 3 inferiores com métricas gerais
+    panel_data = {
+        1: (first_7_categories[0].replace("cat_", ""), category_totals.get(first_7_categories[0], 0), "Total"),
+        2: (first_7_categories[1].replace("cat_", ""), category_totals.get(first_7_categories[1], 0), "Total"),
+        3: (first_7_categories[2].replace("cat_", ""), category_totals.get(first_7_categories[2], 0), "Total"),
+        4: (first_7_categories[3].replace("cat_", ""), category_totals.get(first_7_categories[3], 0), "Total"),
+        5: (first_7_categories[4].replace("cat_", ""), category_totals.get(first_7_categories[4], 0), "Total"),
+        6: (first_7_categories[5].replace("cat_", ""), category_totals.get(first_7_categories[5], 0), "Total"),
+        7: (first_7_categories[6].replace("cat_", ""), category_totals.get(first_7_categories[6], 0), "Total"),
+        8: ("Total de Casos", total_cases, ""),
+        9: ("Dias", total_days, ""),
+        10: ("Média de casos", average_cases_per_day, "")
+    }
+else:
+    panel_data = {
+        1: ("N/A", 0, "Sem Dados"),
+        2: ("N/A", 0, "Sem Dados"),
+        3: ("N/A", 0, "Sem Dados"),
+        4: ("N/A", 0, "Sem Dados"),
+        5: ("N/A", 0, "Sem Dados"),
+        6: ("N/A", 0, "Sem Dados"),
+        7: ("N/A", 0, "Sem Dados"),
+        8: ("Total de Casos", 0, ""),
+        9: ("Dias", 0, ""),
+        10: ("Média de casos", 0, "")
+    }
 
-    data_inicio = st.sidebar.date_input(
-        "Data de Início",
-        min_value=df['ds_normalized'].min().date(), # Extract date part
-        max_value=df['ds_normalized'].max().date(), # Extract date part
-        value=df['ds_normalized'].min().date() # Extract date part
-    )
+# -------------------- Exibição dos Painéis --------------------
+# Painéis superiores (7)
+upper_panels = {i: panel_data[i] for i in range(1, 8)}
+display_data_panels(7, upper_panels)
 
-    data_fim = st.sidebar.date_input(
-        "Data de Fim",
-        min_value=df['ds_normalized'].min().date(),  # Extract date part
-        max_value=df['ds_normalized'].max().date(), # Extract date part
-        value=df['ds_normalized'].max().date()  # Extract date part
-    )
+# Painéis inferiores (3), reindexando para chaves 1,2,3
+lower_panels = {i+1: v for i, v in enumerate(list(panel_data.values())[7:10])}
+display_data_panels(3, lower_panels)
 
-    categorias_selecionadas = st.sidebar.multiselect(
-        "Categorias",
-        categories,
-        default=categories  # Todas as categorias selecionadas por padrão
-    )
+# -------------------- Exibição dos Gráficos --------------------
+cols4 = st.columns(2)
 
-    # -------------------- Filter Data Function --------------------
-    @st.cache_data
-    def filtrar_dados(df, data_inicio, data_fim, categorias_selecionadas):
-        df_filtrado = df.copy()
-
-        # Convert data_inicio and data_fim to pandas datetime
-        data_inicio = pd.to_datetime(data_inicio)
-        data_fim = pd.to_datetime(data_fim)
-
-        if data_inicio and data_fim:
-            df_filtrado = df_filtrado[
-                (df_filtrado['ds_normalized'] >= data_inicio) & (df_filtrado['ds_normalized'] <= data_fim)
-            ]
-
-        return df_filtrado
-
-    # -------------------- Apply Filters --------------------
-
-    filtered_df = filtrar_dados(df, data_inicio, data_fim, categories_selecionadas)
-
-    # -------------------- Apply Category Filters --------------------
-    if categorias_selecionadas:
-        filter_condition = filtered_df[categories_selecionadas].any(axis=1)
-        filtered_df = filtered_df[filter_condition]
-
-
-    # -------------------- Calculate Metrics (Using Filtered Data) --------------------
-    # Use the filtered data, if it exists
-    if not filtered_df.empty:
-        total_cases = filtered_df['total'].sum()
-        total_days = filtered_df['ds_normalized'].nunique()
-        average_cases_per_day = total_cases / total_days if total_days != 0 else 0
-
-        # Calculate totals for each of the first 7 categories
-        category_totals = {}
-        for i, cat in enumerate(first_7_categories):
-            category_totals[cat] = filtered_df[cat].sum()
-
-        # Rest of cases
-        panel_data = {
-            1: (first_7_categories[0].replace("cat_",""), category_totals.get(first_7_categories[0], 0), "Total"),
-            2: (first_7_categories[1].replace("cat_",""), category_totals.get(first_7_categories[1], 0), "Total"),
-            3: (first_7_categories[2].replace("cat_",""), category_totals.get(first_7_categories[2], 0), "Total"),
-            4: (first_7_categories[3].replace("cat_",""), category_totals.get(first_7_categories[3], 0), "Total"),
-            5: (first_7_categories[4].replace("cat_",""), category_totals.get(first_7_categories[4], 0), "Total"),
-            6: (first_7_categories[5].replace("cat_",""), category_totals.get(first_7_categories[5], 0), "Total"),
-            7: (first_7_categories[6].replace("cat_",""), category_totals.get(first_7_categories[6], 0), "Total"),
-            8: ("Total de Casos", total_cases, "Todas as Categorias"),
-            9: ("Total de Dias", total_days, "Total de Dias"),
-            10: ("Média de Casos", average_cases_per_day, "Por Dia"),
-        }
-    else:
-        panel_data = {
-            1: ("N/A", 0, "Sem Dados"),
-            2: ("N/A", 0, "Sem Dados"),
-            3: ("N/A", 0, "Sem Dados"),
-            4: ("N/A", 0, "Sem Dados"),
-            5: ("N/A", 0, "Sem Dados"),
-            6: ("N/A", 0, "Sem Dados"),
-            7: ("N/A", 0, "Sem Dados"),
-            8: ("Total de Casos", 0, "Todas as Categorias"),
-            9: ("Total de Dias", 0, "Total de Dias"),
-            10: ("Média de Casos", 0, "Por Dia")
-        }
-
-    # -------------------- Display Data Panels --------------------
-    display_data_panels(7, panel_data)
-    display_data_panels(3, dict(list(panel_data.items())[7:10]))
-
-
-    # -------------------- Display Charts --------------------
-    cols4 = st.columns(2)
-
-    # Function to display charts with empty state handling
-    def display_chart(col, chart_func, data, categories, title="Sem dados para exibir"):
-        with col:
-            st.markdown("<div class='box-panel'>", unsafe_allow_html=True)
-            if not data.empty:
-                st.plotly_chart(chart_func(data, categories), use_container_width=True)
-            else:
-                st.plotly_chart(px.bar(title = title),use_container_width=True)
-            st.markdown("</div>", unsafe_allow_html=True)
-
-
-    display_chart(cols4[0], create_total_sum_bar_chart, filtered_df, first_7_categories)
-    display_chart(cols4[1], create_daily_sum_bar_charts, filtered_df, first_7_categories)
-
-    st.markdown("<div class='box-panel'>", unsafe_allow_html=True)
-    if not filtered_df.empty:
-      st.plotly_chart(create_big_bar_chart(filtered_df), use_container_width=True)
-    else:
-      st.plotly_chart(px.bar(title = "Sem dados para exibir"),use_container_width=True)
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    st.markdown("<div class='box-panel'>", unsafe_allow_html=True)
-    if not filtered_df.empty:
-      st.plotly_chart(create_30_day_category_line_chart(filtered_df), use_container_width=True)
-    else:
-      st.plotly_chart(px.bar(title = "Sem dados para exibir"),use_container_width=True)
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    st.markdown("<div class='box-panel'>", unsafe_allow_html=True)
-    if not filtered_df.empty:
-      st.plotly_chart(create_daily_category_bar_chart(filtered_df, categories), use_container_width=True)
-    else:
-      st.plotly_chart(px.bar(title = "Sem dados para exibir"),use_container_width=True)
-    st.markdown("</div>", unsafe_allow_html=True)
-
-
-    # -------------------- Data Export --------------------
-    st.markdown("### Exportar Dados")
-    download_format = st.radio("Selecione o formato:", ["csv", "xlsx"], horizontal=True)
-    if st.button("Gerar Link de Download"):
-        if not filtered_df.empty:
-            download_link = generate_download_link(filtered_df, download_format)
-            st.markdown(download_link, unsafe_allow_html=True)
+def display_chart(col, chart_func, data, categories, title="Sem dados para exibir"):
+    with col:
+        st.markdown("<div class='box-panel'>", unsafe_allow_html=True)
+        if not data.empty:
+            st.plotly_chart(chart_func(data, categories), use_container_width=True)
         else:
-            st.warning("Nenhum dado para exportar.")
+            st.plotly_chart(px.bar(title=title), use_container_width=True)
+        st.markdown("</div>", unsafe_allow_html=True)
 
-if __name__ == "__main__":
-    main()
+display_chart(cols4[0], create_total_sum_bar_chart, df, first_7_categories)
+display_chart(cols4[1], create_daily_sum_bar_charts, df, first_7_categories)
+
+st.markdown("<div class='box-panel'>", unsafe_allow_html=True)
+if not df.empty:
+    st.plotly_chart(create_big_bar_chart(df), use_container_width=True)
+else:
+    st.plotly_chart(px.bar(title="Sem dados para exibir"), use_container_width=True)
+st.markdown("</div>", unsafe_allow_html=True)
+
+st.markdown("<div class='box-panel'>", unsafe_allow_html=True)
+if not df.empty:
+    st.plotly_chart(create_30_day_category_line_chart(df), use_container_width=True)
+else:
+    st.plotly_chart(px.bar(title="Sem dados para exibir"), use_container_width=True)
+st.markdown("</div>", unsafe_allow_html=True)
+
+st.markdown("<div class='box-panel'>", unsafe_allow_html=True)
+if not df.empty:
+    st.plotly_chart(create_daily_category_bar_chart(df, categories), use_container_width=True)
+else:
+    st.plotly_chart(px.bar(title="Sem dados para exibir"), use_container_width=True)
+st.markdown("</div>", unsafe_allow_html=True)
+
+# -------------------- Exportação de Dados --------------------
+st.markdown("### Exportar Dados")
+download_format = st.radio("Selecione o formato:", ["csv", "xlsx"], horizontal=True)
+if st.button("Gerar Link de Download"):
+    if not df.empty:
+        def generate_download_link(data, file_format):
+            if file_format == 'csv':
+                output = io.StringIO()
+                data.to_csv(output, index=False, encoding='utf-8')
+                csv_data = output.getvalue()
+                b64 = base64.b64encode(csv_data.encode()).decode()
+                return f'<a href="data:file/csv;base64,{b64}" download="dashboard_data.csv">Baixar CSV</a>'
+            elif file_format == 'xlsx':
+                output = io.BytesIO()
+                data_export = data.copy()
+                data_export = data_export.drop(columns=['year', 'month', 'ds_normalized'])
+                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                    data_export.to_excel(writer, index=False, sheet_name='Dashboard Data')
+                    for column in data_export.columns:
+                        column_width = max(data_export[column].astype(str).map(len).max(), len(column))
+                        col_idx = data_export.columns.get_loc(column)
+                        writer.sheets['Dashboard Data'].set_column(col_idx, col_idx, column_width + 2)
+                xlsx_data = output.getvalue()
+                b64 = base64.b64encode(xlsx_data).decode()
+                return f'<a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download="dashboard_data.xlsx">Baixar XLSX</a>'
+            else:
+                return ""
+        download_link = generate_download_link(df, download_format)
+        st.markdown(download_link, unsafe_allow_html=True)
+    else:
+        st.warning("Nenhum dado para exportar.")
