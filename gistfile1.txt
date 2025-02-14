@@ -13,15 +13,17 @@ st.set_page_config(layout="wide")
 def load_and_preprocess_data():
     try:
         # Caminho do arquivo CSV
-        script_dir = os.path.dirname(os.path.abspath(__file__))  # Corrigido: Use __file__
+        script_dir = os.path.dirname(os.path.abspath(__file__))
         csv_file_path = os.path.join(script_dir, 'forecast_Fevereiro(Previsoes).csv')
 
-        # Leitura e renomeação das colunas
+        # Leitura do CSV
         df = pd.read_csv(csv_file_path, encoding="latin1", sep=";")
+        
+        # Renomeação das colunas para remover acentos e espaços indesejados
         df.rename(columns={
             "y": "total",
             "cat_informação": "cat_informacao",
-            "cat_reclamação": "cat_reclamacao",
+            "cat_reclamação": "cat_reclamacao",  # renomeia com acento para sem acento
             "cat_pré-venda": "cat_pre_venda",
             "cat_solicitação": "cat_solicitacao"
         }, inplace=True)
@@ -36,7 +38,7 @@ def load_and_preprocess_data():
         # Seleciona apenas o mês de fevereiro (mês == 2)
         df = df[df['month'] == 2]
         
-        # Converte as colunas de categorias e total para numérico
+        # Lista de colunas que precisamos converter e somar
         cols_to_sum = [
             "cat_cancelamento",
             "cat_informacao",
@@ -46,13 +48,18 @@ def load_and_preprocess_data():
             "cat_pre_venda",
             "cat_solicitacao"
         ]
+        # Verifica se cada coluna existe, convertendo para numérico ou criando com zeros
         for col in cols_to_sum:
-            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+            else:
+                df[col] = 0
+        
+        # Converte a coluna total para numérico
         df['total'] = pd.to_numeric(df['total'], errors='coerce').fillna(0)
         
         # Ajuste: Reescala as categorias para que a soma por linha seja igual ao total
         df['sum_categories'] = df[cols_to_sum].sum(axis=1)
-        # Apenas ajuste se a soma das categorias não for aproximadamente igual ao total
         mask = (df['sum_categories'] > 0) & (~np.isclose(df['sum_categories'], df['total']))
         df.loc[mask, cols_to_sum] = (
             df.loc[mask, cols_to_sum]
@@ -71,14 +78,30 @@ def load_and_preprocess_data():
 
 df = load_and_preprocess_data()
 
-# ------ CSS Styling ------
+# -------------------- Filtro por Data na Sidebar --------------------
+st.sidebar.header("Filtro de Data")
+min_date = df['ds_normalized'].min().date()
+max_date = df['ds_normalized'].max().date()
+selected_dates = st.sidebar.date_input("Selecione o intervalo de dias", [min_date, max_date])
 
+if isinstance(selected_dates, list) and len(selected_dates) == 2:
+    start_date, end_date = selected_dates
+    # Filtra os dados com base na coluna 'ds_normalized'
+    filtered_df = df[df['ds_normalized'].dt.date.between(start_date, end_date)]
+else:
+    filtered_df = df.copy()
+
+# ------ CSS Styling ------
 CSS = """
 <style>
+    /* Background da aplicação em um cinza escuro moderno */
+    [data-testid="stAppViewContainer"] {
+        background-color: #2b2b2b;
+    }
     .stContainer { margin-bottom: 10px; }
     .data-panel-container { margin: 5px; }
     .data-panel {
-        text-align: center; /* Centraliza o texto dentro do painel */
+        text-align: center;
         box-sizing: border-box;
         transition: background-color 0.3s ease;
         margin-bottom: 10px;
@@ -94,22 +117,21 @@ CSS = """
     .data-panel h3 { color: #ffffff; font-size: 0.9em; margin: 0; }
     .data-panel h1 { color: #ffffff; font-size: 2em; margin: 0; }
     .data-panel p { color: #ffffff; font-size: 0.8em; margin: 0; }
-    /* Adicionando borda aos gráficos */
+    /* Bordas e layout dos gráficos */
     .chart-container {
-        border: 1px solid #666; /* Cor e estilo da borda */
-        border-radius: 5px; /* Opcional: para bordas arredondadas */
-        margin-bottom: 20px; /* Espaçamento abaixo do gráfico */
-        overflow: hidden; /* Garante que o conteúdo não vaze da borda */
+        border: 1px solid #666;
+        border-radius: 5px;
+        margin-bottom: 20px;
+        overflow: hidden;
     }
     .chart-container > div {
-        padding: 10px; /* Espaçamento interno para afastar o gráfico da borda */
+        padding: 10px;
     }
-    /* Removendo as bordas dos gráficos */
     .box-panel {
-        padding: 0px; /* Ajuste o preenchimento conforme necessário */
-        margin-bottom: 0px; /* Ajuste a margem conforme necessário */
-        border: none; /* Remove a borda */
-        box-shadow: none; /* Remove a sombra */
+        padding: 0px;
+        margin-bottom: 0px;
+        border: none;
+        box-shadow: none;
     }
     .graph-container { border: 1px solid #666; height: 300px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
     .chart-wrapper { height: 100%; display: flex; }
@@ -119,7 +141,7 @@ CSS = """
 """
 st.markdown(CSS, unsafe_allow_html=True)
 
-# Função para exibir os painéis de dados
+# -------------------- Função para exibir os painéis de dados --------------------
 def display_data_panels(num_panels, data_dict=None):
     cols = st.columns(num_panels)
     with st.container():
@@ -129,15 +151,14 @@ def display_data_panels(num_panels, data_dict=None):
                 panel_num = i + 1
                 if data_dict and panel_num in data_dict:
                     title, value, subtext = data_dict[panel_num]
-                    # Formata o valor, removendo decimais e separando por milhar (,)
+                    # Formata o valor, removendo decimais e separando por milhar
                     if isinstance(value, (int, float)):
                         if value >= 1000:
-                            formatted_value = f"{value:,.0f}".replace(",", ".") #revisar
+                            formatted_value = f"{value:,.0f}".replace(",", ".")
                         else:
-                            formatted_value = f"{int(value):}"
+                            formatted_value = f"{int(value)}"
                     else:
                         formatted_value = value
-
                     st.markdown(f'''
                         <div class="data-panel">
                             <h3>{title}</h3>
@@ -151,8 +172,7 @@ def display_data_panels(num_panels, data_dict=None):
                         unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-# As funções de gráfico permanecem as mesmas (utilizam os dados ajustados)
-
+# -------------------- Funções de Gráficos --------------------
 def create_total_sum_bar_chart(data, categories):
     if data.empty:
         fig = px.bar(title="Sem dados para exibir")
@@ -175,21 +195,17 @@ def create_total_sum_bar_chart(data, categories):
             font=dict(size=10),
             plot_bgcolor='rgba(0,0,0,0)',
             paper_bgcolor='rgba(0,0,0,0)',
-            margin_t=50,
-            margin_b=50,
-            margin_l=0,
-            margin_r=0,
-            xaxis_title=None,  # Removendo rótulos do eixo x
-            yaxis_title=None,  # Removendo rótulos do eixo y
-            xaxis = dict(showgrid=False, zeroline=False),  # Removendo grades do eixo x
-            yaxis = dict(showgrid=False, zeroline=False, showticklabels=False),  # Removendo grades e rótulos do eixo y
+            margin_t=50, margin_b=50, margin_l=0, margin_r=0,
+            xaxis_title=None, yaxis_title=None,
+            xaxis=dict(showgrid=False, zeroline=False),
+            yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
         )
-        return fig
+    return fig
 
 def create_daily_sum_bar_charts(data, categories):
     df_temp = data.copy()
-    today = pd.to_datetime('today').normalize()  # Obtenha a data atual normalizada
-    last_7_days = pd.date_range(start=today, periods=7, freq='D')  # 7 dias a partir de hoje
+    today = pd.to_datetime('today').normalize()
+    last_7_days = pd.date_range(start=today, periods=7, freq='D')
     df_temp = df_temp[df_temp['ds_normalized'].isin(last_7_days)]
     if df_temp.empty:
         fig = px.bar(title="Sem dados para exibir nos próximos 7 dias")
@@ -213,16 +229,11 @@ def create_daily_sum_bar_charts(data, categories):
                 font=dict(size=10),
                 plot_bgcolor='rgba(0,0,0,0)',
                 paper_bgcolor='rgba(0,0,0,0)',
-                margin_t=50,
-                margin_b=50,
-                margin_l=0,
-                margin_r=0,
-                xaxis_title=None,  # Removendo rótulos do eixo x
-                yaxis_title=None,  # Removendo rótulos do eixo y
-                xaxis = dict(showgrid=False, zeroline=False, tickformat='%b %d', showticklabels=True),  # Mostrando datas no formato "Mês Dia"
-                yaxis = dict(showgrid=False, zeroline=False, showticklabels=False),  # Removendo grades e rótulos do eixo y
+                margin_t=50, margin_b=50, margin_l=0, margin_r=0,
+                xaxis_title=None, yaxis_title=None,
+                xaxis=dict(showgrid=False, zeroline=False, tickformat='%b %d', showticklabels=True),
+                yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
             )
-            return fig
         except Exception as e:
             fig = px.bar(
                 title=f"Sem dados para exibir nos próximos 7 dias. (Erro: {e})",
@@ -234,16 +245,12 @@ def create_daily_sum_bar_charts(data, categories):
                 font=dict(size=10),
                 plot_bgcolor='rgba(0,0,0,0)',
                 paper_bgcolor='rgba(0,0,0,0)',
-                margin_t=50,
-                margin_b=50,
-                margin_l=0,
-                margin_r=0,
-                xaxis_title=None,  # Removendo rótulos do eixo x
-                yaxis_title=None,  # Removendo rótulos do eixo y
-                xaxis = dict(showgrid=False, zeroline=False, tickformat='%b %d', showticklabels=True),  # Mostrando datas no formato "Mês Dia"
-                yaxis = dict(showgrid=False, zeroline=False, showticklabels=False),  # Removendo grades e rótulos do eixo y
+                margin_t=50, margin_b=50, margin_l=0, margin_r=0,
+                xaxis_title=None, yaxis_title=None,
+                xaxis=dict(showgrid=False, zeroline=False, tickformat='%b %d', showticklabels=True),
+                yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
             )
-            return fig
+    return fig
 
 def create_big_bar_chart(data):
     df_temp = data.copy()
@@ -274,16 +281,11 @@ def create_big_bar_chart(data):
                 font=dict(size=10),
                 plot_bgcolor='rgba(0,0,0,0)',
                 paper_bgcolor='rgba(0,0,0,0)',
-                margin_t=50,
-                margin_b=50,
-                margin_l=0,
-                margin_r=0,
-                xaxis_title=None,  # Removendo rótulos do eixo x
-                yaxis_title=None,  # Removendo rótulos do eixo y
-                xaxis = dict(showgrid=False, zeroline=False, tickformat='%b %d', showticklabels=True),  # Mostrando datas no formato "Mês Dia"
-                yaxis = dict(showgrid=False, zeroline=False, showticklabels=False),  # Removendo grades e rótulos do eixo y
+                margin_t=50, margin_b=50, margin_l=0, margin_r=0,
+                xaxis_title=None, yaxis_title=None,
+                xaxis=dict(showgrid=False, zeroline=False, tickformat='%b %d', showticklabels=True),
+                yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
             )
-            return fig
         except Exception as e:
             fig = px.bar(
                 title=f"Sem dados para exibir no último mês. (Erro: {e})",
@@ -294,66 +296,21 @@ def create_big_bar_chart(data):
                 font=dict(size=10),
                 plot_bgcolor='rgba(0,0,0,0)',
                 paper_bgcolor='rgba(0,0,0,0)',
-                margin_t=50,
-                margin_b=50,
-                margin_l=0,
-                margin_r=0,
-                xaxis_title=None,  # Removendo rótulos do eixo x
-                yaxis_title=None,  # Removendo rótulos do eixo y
-                xaxis = dict(showgrid=False, zeroline=False, tickformat='%b %d', showticklabels=True),  # Mostrando datas no formato "Mês Dia"
-                yaxis = dict(showgrid=False, zeroline=False, showticklabels=False),  # Removendo grades e rótulos do eixo y
+                margin_t=50, margin_b=50, margin_l=0, margin_r=0,
+                xaxis_title=None, yaxis_title=None,
+                xaxis=dict(showgrid=False, zeroline=False, tickformat='%b %d', showticklabels=True),
+                yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
             )
-            return fig
+    return fig
 
-
-def create_7_day_category_bar_chart(data, categories):
-    df_temp = data.copy()
-    today = pd.to_datetime('today').normalize()
-    last_7_days = pd.date_range(start=today, periods=7, freq='D')
-    df_temp = df_temp[df_temp['ds_normalized'].isin(last_7_days)]
-
-    if df_temp.empty:
-        fig = px.bar(title="Sem dados para exibir para o gráfico diário por categoria (Próximos 7 dias)")
-    else:
-        for col in categories:
-            df_temp[col] = pd.to_numeric(df_temp[col], errors='coerce').fillna(0)
-
-        daily_counts = df_temp.groupby('ds_normalized')[categories].sum().reset_index()
-        fig = px.bar(daily_counts,
-                     y='ds_normalized',  # Inverte x e y
-                     x=categories,  # Inverte x e y
-                     title='Contagem Diária de Casos por Categoria (Próximos 7 Dias)',
-                     color_discrete_sequence=px.colors.qualitative.Pastel,
-                     text_auto=True,
-                     orientation='h')
-
-        fig.update_layout(
-            height=450,  # Altura do gráfico
-            width=800,   # Largura do gráfico
-            title_x=0.1,
-            margin=dict(b=100),
-            title_font=dict(color='white'),
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            margin_t=50,
-            margin_b=50,
-            margin_l=0,
-            margin_r=0,
-            xaxis_title=None,
-            yaxis_title=None,
-            xaxis = dict(showgrid=False, zeroline=False, showticklabels=True),  # Inverte eixos aqui também
-            yaxis = dict(showgrid=False, zeroline=False, showticklabels=False),  # Exibe categorias
-            legend_title=None,
-        )
-        return fig
-
-def create_30_day_category_connected_scatter_chart(data):
+# Nova função: gráfico de linha suavizado para os últimos 30 dias
+def create_30_day_category_smoothed_line_chart(data):
     df_temp = data.copy()
     max_date = df_temp['ds_normalized'].max()
     last_30_days = pd.date_range(end=max_date, periods=30, freq='D')
     df_temp = df_temp[df_temp['ds_normalized'].isin(last_30_days)]
     if df_temp.empty:
-        fig = px.scatter(title="Sem dados para exibir nos últimos 30 dias")
+        fig = px.line(title="Sem dados para exibir nos últimos 30 dias")
     else:
         category_cols = [
             "cat_cancelamento",
@@ -369,47 +326,43 @@ def create_30_day_category_connected_scatter_chart(data):
         daily_counts = df_temp.groupby('ds_normalized')[category_cols].sum().reset_index()
         daily_counts = daily_counts.melt(id_vars='ds_normalized', var_name='category', value_name='count')
         daily_counts['category'] = daily_counts['category'].str.replace('cat_', '')
-        fig = px.scatter(daily_counts, x='ds_normalized', y='count', color='category',
-                         title='Contagem Diária de Casos por Categoria (Últimos 30 Dias)',
-                         color_discrete_sequence=px.colors.qualitative.Pastel,
-                         symbol="category", # Adicione símbolos para melhorar a distinção
-                         )
-        fig.update_traces(mode='lines+markers') # Conecte os pontos com linhas
+        fig = px.line(
+            daily_counts,
+            x='ds_normalized',
+            y='count',
+            color='category',
+            title='Contagem Diária de Casos por Categoria (Últimos 30 Dias)',
+            color_discrete_sequence=px.colors.qualitative.Pastel
+        )
+        fig.update_traces(line_shape='spline', mode='lines+markers')
         fig.update_layout(
             height=350,
             title_x=0.1,
             margin=dict(b=100),
             title_font=dict(color='white'),
+            font=dict(size=10),
             plot_bgcolor='rgba(0,0,0,0)',
             paper_bgcolor='rgba(0,0,0,0)',
-            margin_t=50,
-            margin_b=50,
-            margin_l=0,
-            margin_r=0,
-            xaxis_title=None,  # Removendo rótulos do eixo x
-            yaxis_title=None,  # Removendo rótulos do eixo y
-            xaxis = dict(showgrid=False, zeroline=False, tickformat='%b %d', showticklabels=True),  # Mostrando datas no formato "Mês Dia"
-            yaxis = dict(showgrid=False, zeroline=False, showticklabels=False),  # Removendo grades e rótulos do eixo y
-            legend_title=None,  # Removendo título da legenda
+            margin_t=50, margin_b=50, margin_l=0, margin_r=0,
+            xaxis_title=None, yaxis_title=None,
+            xaxis=dict(showgrid=False, zeroline=False, tickformat='%b %d', showticklabels=True),
+            yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            legend_title=None,
         )
-        return fig
+    return fig
 
 # -------------------- Cálculo das Métricas e Painéis --------------------
-# Lista de categorias (7 painéis superiores)
 categories = [
     'cat_cancelamento', 'cat_informacao', 'cat_reclamacao',
     'cat_troca', 'cat_preventiva', 'cat_pre_venda', 'cat_solicitacao'
 ]
 first_7_categories = categories[:7]
 
-if not df.empty:
-    # Soma de cada categoria (já ajustada)
-    category_totals = {cat: df[cat].sum() for cat in first_7_categories}
-    total_cases = df['total'].sum()
-    total_days = df['ds_normalized'].nunique()
+if not filtered_df.empty:
+    category_totals = {cat: filtered_df[cat].sum() for cat in first_7_categories}
+    total_cases = filtered_df['total'].sum()
+    total_days = filtered_df['ds_normalized'].nunique()
     average_cases_per_day = total_cases / total_days if total_days != 0 else 0
-
-    # Painéis: 7 superiores para cada categoria e 3 inferiores com métricas gerais
     panel_data = {
         1: (first_7_categories[0].replace("cat_", ""), category_totals.get(first_7_categories[0], 0), "Total"),
         2: (first_7_categories[1].replace("cat_", ""), category_totals.get(first_7_categories[1], 0), "Total"),
@@ -437,16 +390,13 @@ else:
     }
 
 # -------------------- Exibição dos Painéis --------------------
-# Painéis superiores (7)
 upper_panels = {i: panel_data[i] for i in range(1, 8)}
 display_data_panels(7, upper_panels)
 
-# Painéis inferiores (3), reindexando para chaves 1,2,3
 lower_panels = {i+1: v for i, v in enumerate(list(panel_data.values())[7:10])}
 display_data_panels(3, lower_panels)
 
 # -------------------- Exibição dos Gráficos --------------------
-
 cols4 = st.columns(2)
 
 def display_chart(col, chart_func, data, categories, title="Sem dados para exibir"):
@@ -457,33 +407,27 @@ def display_chart(col, chart_func, data, categories, title="Sem dados para exibi
         st.markdown("</div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
-display_chart(cols4[0], create_total_sum_bar_chart, df, first_7_categories)
-display_chart(cols4[1], create_daily_sum_bar_charts, df, first_7_categories)
+display_chart(cols4[0], create_total_sum_bar_chart, filtered_df, first_7_categories)
+display_chart(cols4[1], create_daily_sum_bar_charts, filtered_df, first_7_categories)
 
 st.markdown("<div class='chart-container'>", unsafe_allow_html=True)
 st.markdown("<div>", unsafe_allow_html=True)
-st.plotly_chart(create_big_bar_chart(df), use_container_width=True)
+st.plotly_chart(create_big_bar_chart(filtered_df), use_container_width=True)
 st.markdown("</div>", unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
+# Gráfico de linha suavizado para os últimos 30 dias
 st.markdown("<div class='chart-container'>", unsafe_allow_html=True)
 st.markdown("<div>", unsafe_allow_html=True)
-st.plotly_chart(create_30_day_category_connected_scatter_chart(df), use_container_width=True)
-st.markdown("</div>", unsafe_allow_html=True)
-st.markdown("</div>", unsafe_allow_html=True)
-
-st.markdown("<div class='chart-container'>", unsafe_allow_html=True)
-st.markdown("<div>", unsafe_allow_html=True)
-st.plotly_chart(create_7_day_category_bar_chart(df, categories), use_container_width=True)
+st.plotly_chart(create_30_day_category_smoothed_line_chart(filtered_df), use_container_width=True)
 st.markdown("</div>", unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
 # -------------------- Exportação de Dados --------------------
-
 st.markdown("### Exportar Dados")
 download_format = st.radio("Selecione o formato:", ["csv", "xlsx"], horizontal=True)
 if st.button("Gerar Link de Download"):
-    if not df.empty:
+    if not filtered_df.empty:
         def generate_download_link(data, file_format):
             if file_format == 'csv':
                 output = io.StringIO()
@@ -506,7 +450,7 @@ if st.button("Gerar Link de Download"):
                 return f'<a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download="dashboard_data.xlsx">Baixar XLSX</a>'
             else:
                 return ""
-        download_link = generate_download_link(df, download_format)
+        download_link = generate_download_link(filtered_df, download_format)
         st.markdown(download_link, unsafe_allow_html=True)
     else:
         st.warning("Nenhum dado para exportar.")
