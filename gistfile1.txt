@@ -25,7 +25,8 @@ def load_and_preprocess_data():
             "cat_informação": "cat_informacao",
             "cat_reclamação": "cat_reclamacao",  # renomeia com acento para sem acento
             "cat_pré-venda": "cat_pre_venda",
-            "cat_solicitação": "cat_solicitacao"
+            "cat_solicitação": "cat_solicitacao",
+            "detalhes_caso": "detalhes_caso"  # Adicionei esta linha
         }, inplace=True)
 
         # Conversão de datas
@@ -93,7 +94,7 @@ selected_dates = st.sidebar.date_input("Selecione o intervalo de dias", [min_dat
 # Filtro de Categoria
 st.sidebar.subheader("Categorias")
 available_categories = [col for col in df.columns if col.startswith('cat_')]
-selected_categories = st.sidebar.multiselect("Selecione as Categorias", available_categories, default=available_categories)
+selected_category = st.sidebar.selectbox("Selecione uma Categoria", ['Todas'] + available_categories)  # Alterado para selectbox
 
 # Filtro de Ano (se houver dados de mais de um ano)
 if df['year'].nunique() > 1:
@@ -102,6 +103,10 @@ if df['year'].nunique() > 1:
     selected_years = st.sidebar.multiselect("Selecione os Anos", available_years, default=available_years)
 else:
     selected_years = [df['year'].iloc[0]]  # Garante que selected_years esteja sempre definido
+
+# Novo filtro de texto
+st.sidebar.subheader("Descrição do Caso")
+search_term = st.sidebar.text_input("Pesquisar por palavra-chave:")
 
 # -------------------- Filtragem dos Dados --------------------
 
@@ -117,14 +122,17 @@ if isinstance(selected_dates, list) and len(selected_dates) == 2:
     end_date = pd.to_datetime(end_date).date()
     filter_condition &= filtered_df['ds_normalized'].dt.date.between(start_date, end_date)
 
-# Aplicar o filtro de Categoria
-if selected_categories:
-    category_filter = filtered_df[selected_categories].any(axis=1)
-    filter_condition &= category_filter
+# Aplicar o filtro de Categoria (MODIFICADO)
+#if selected_category != 'Todas':
+ #   filter_condition &= filtered_df[selected_category] > 0  # Garante que a categoria seja maior que zero
 
 # Aplicar o filtro de Ano
 if 'year' in filtered_df.columns and selected_years:
     filter_condition &= filtered_df['year'].isin(selected_years)
+
+# Aplicar o filtro de texto
+if search_term:
+    filter_condition &= filtered_df['detalhes_caso'].str.contains(search_term, case=False, na=False)
 
 # Aplicar o filtro combinado
 filtered_df = filtered_df[filter_condition]
@@ -164,9 +172,28 @@ CSS = """
     padding-bottom: 20px; /* Espaçamento entre o gráfico e a borda */
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2); /* Sombra sutil nos gráficos */
 }
+/* Estilo para o painel de destaque */
+.highlight-panel {
+    text-align: center;
+    background-color: #336699; /* Cor de destaque */
+    color: white;
+    padding: 15px;
+    border-radius: 5px;
+    margin-bottom: 10px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3), 0 0 10px rgba(0, 0, 0, 0.1) inset; /* Sombra interna e externa */
+}
+.highlight-panel-title {
+    font-size: 1.2em;
+    text-transform: uppercase;
+}
+.highlight-panel-value {
+    font-size: 2.5em;
+    font-weight: bold;
+}
 </style>
 """
 st.markdown(CSS, unsafe_allow_html=True)
+
 
 # -------------------- Função para exibir os painéis de dados --------------------
 
@@ -441,38 +468,6 @@ def create_30_day_category_smoothed_line_chart(data):
             )
             return fig
 
-# -------------------- Função para exibir os painéis de dados --------------------
-
-def display_data_panels(num_panels, data_dict=None):
-    cols = st.columns(num_panels)
-    with st.container():
-        st.markdown('<div class="panel-row">', unsafe_allow_html=True)
-        for i, col in enumerate(cols):
-            with col:
-                panel_num = i + 1
-                if data_dict and panel_num in data_dict:
-                    title, value, subtext = data_dict[panel_num]
-                    # Formata o valor, removendo decimais e separando por milhar
-                    if isinstance(value, (int, float)):
-                        if value >= 1000:
-                            formatted_value = f"{value:,.0f}".replace(",", ".")
-                        else:
-                            formatted_value = f"{int(value)}"
-                    else:
-                        formatted_value = value
-                    st.markdown(f"""
-                    <div class="data-panel">
-                        <div class="data-panel-title">{title}</div>
-                        <div class="data-panel-value">{formatted_value}</div>
-                        <div class="data-panel-total">{subtext}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                else:
-                    st.markdown(
-                        f'<div class="data-panel"><h3>Painel {panel_num}</h3><h1>{panel_num}</h1></div>',
-                        unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-
 # -------------------- Cálculo das Métricas e Painéis --------------------
 
 categories = [
@@ -481,13 +476,12 @@ categories = [
 ]
 first_7_categories = categories[:7]
 
+# Garante que filtered_df não esteja vazio antes de calcular
 if not filtered_df.empty:
     category_totals = {cat: filtered_df[cat].sum() if cat in filtered_df.columns else 0 for cat in first_7_categories}
     total_cases = filtered_df['total'].sum()
 
-   # total_days = filtered_df['Data'].nunique() if 'Data' in filtered_df.columns else 0 #linha corrigida
-
-    total_days = filtered_df['ds_normalized'].nunique() if 'ds_normalized' in filtered_df.columns else 0 #Linha original
+    total_days = filtered_df['ds_normalized'].nunique() if 'ds_normalized' in filtered_df.columns else 0
 
     average_cases_per_day = total_cases / total_days if total_days != 0 else 0
     panel_data = {
@@ -517,6 +511,20 @@ else:
         10: ("Média de casos", 0, "")
     }
 
+# -------------------- Exibição do Painel de Destaque da Categoria Selecionada --------------------
+if selected_category != 'Todas':
+    # Calcula a contagem de casos para a categoria selecionada
+    # Usamos o DataFrame original (df) para calcular a contagem, não o filtered_df
+    category_count = df[selected_category].sum()
+
+    # Exibe o painel de destaque
+    st.markdown(f"""
+    <div class="highlight-panel">
+        <div class="highlight-panel-title">Categoria Selecionada: {selected_category.replace("cat_", "").title()}</div>
+        <div class="highlight-panel-value">{int(category_count)}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
 # -------------------- Exibição dos Painéis --------------------
 
 upper_panels = {i: panel_data[i] for i in range(1, 8)}
@@ -537,20 +545,18 @@ def display_chart(col, chart_func, data, categories, title="Sem dados para exibi
         st.markdown("</div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
-display_chart(cols4[0], create_total_sum_bar_chart, filtered_df, first_7_categories)
-display_chart(cols4[1], create_daily_sum_bar_charts, filtered_df, first_7_categories)
+display_chart(cols4[0], create_total_sum_bar_chart, df, first_7_categories)
+display_chart(cols4[1], create_daily_sum_bar_charts, df, first_7_categories)
 
 st.markdown("<div class='chart-container'>", unsafe_allow_html=True)
 st.markdown("<div>", unsafe_allow_html=True)
-st.plotly_chart(create_big_bar_chart(filtered_df), use_container_width=True)
-st.markdown("</div>", unsafe_allow_html=True)
+st.plotly_chart(create_big_bar_chart(df), use_container_width=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
 # Gráfico de linha suavizado para os últimos 30 dias
-
 st.markdown("<div class='chart-container'>", unsafe_allow_html=True)
 st.markdown("<div>", unsafe_allow_html=True)
-st.plotly_chart(create_30_day_category_smoothed_line_chart(filtered_df), use_container_width=True)
+st.plotly_chart(create_30_day_category_smoothed_line_chart(df), use_container_width=True)
 st.markdown("</div>", unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
